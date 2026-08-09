@@ -6,7 +6,7 @@ from typing import Callable
 from PIL import Image
 from torch.utils.data import Dataset
 
-from src.dataset import IMAGE_EXTENSIONS, get_default_transform
+from src.dataset import IMAGE_EXTENSIONS, get_train_transform
 
 
 def image_index_from_path(path: Path) -> int:
@@ -29,6 +29,20 @@ def find_images(root_dir: str | Path) -> list[Path]:
     return sorted(image_paths)
 
 
+def filter_by_index(
+    paths: list[Path],
+    min_index: int | None = None,
+    max_index: int | None = None,
+) -> list[Path]:
+    """按图像帧号区间过滤。min/max 均为 None 时原样返回。"""
+    return [
+        path
+        for path in paths
+        if (min_index is None or image_index_from_path(path) >= min_index)
+        and (max_index is None or image_index_from_path(path) <= max_index)
+    ]
+
+
 class TripletPlaceDataset(Dataset):
     def __init__(
         self,
@@ -39,17 +53,21 @@ class TripletPlaceDataset(Dataset):
         negative_gap: int = 20,
         min_index: int | None = None,
         max_index: int | None = None,
+        db_min_index: int | None = None,
+        db_max_index: int | None = None,
     ):
+        self.anchor_paths = filter_by_index(
+            find_images(anchor_dir), min_index, max_index
+        )
 
-        self.anchor_paths = [
-            path
-            for path in find_images(anchor_dir)
-            if (min_index is None or image_index_from_path(path) >= min_index)
-            and (max_index is None or image_index_from_path(path) <= max_index)
-        ]
+        # database 也支持区间过滤。不过滤时（默认）训练会碰到全部 database 图像，
+        # 包括测试区间的那些——它们会被当作负样本，边界处甚至会被当作正样本。
+        # 传 db_max_index 可以留出一段 purged gap，避免这种边界泄漏。
+        self.database_paths = filter_by_index(
+            find_images(database_dir), db_min_index, db_max_index
+        )
 
-        self.database_paths = find_images(database_dir)
-        self.transform = transform or get_default_transform()
+        self.transform = transform or get_train_transform()
         self.positive_tolerance = positive_tolerance
         self.negative_gap = negative_gap
 

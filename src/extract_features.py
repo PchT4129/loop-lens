@@ -24,13 +24,20 @@ def build_model(checkpoint_path: str | None, device: str):
     return model
 
 
-def extract_features(
+def extract_with_model(
+    model,
     image_dir: str | Path,
+    device: str,
     batch_size: int = 16,
-    checkpoint_path: str | None = None,
+    num_workers: int = 2,
+    show_progress: bool = True,
 ):
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    """用一个【已有的】模型抽特征。训练中的验证评测直接复用这个函数。
 
+    注意 model.eval() + torch.no_grad() 两者都要：前者让 BatchNorm 用固定的
+    running statistics（否则同一张图在不同 batch 里会得到不同特征），后者关掉
+    autograd 省显存。二者正交，缺一不可。
+    """
     dataset = ImageFolderDataset(
         root_dir=image_dir,
         transform=get_default_transform(),
@@ -40,29 +47,46 @@ def extract_features(
         dataset,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=2,
+        num_workers=num_workers,
     )
+
+    was_training = model.training
+    model.eval()
+
+    all_features = []
+    all_paths = []
+
+    with torch.no_grad():
+        iterator = tqdm(loader, desc=f"Extracting {image_dir}") if show_progress else loader
+        for images, paths in iterator:
+            images = images.to(device)
+            all_features.append(model(images).cpu())
+            all_paths.extend(paths)
+
+    if was_training:
+        model.train()
+
+    return torch.cat(all_features, dim=0), all_paths
+
+
+def extract_features(
+    image_dir: str | Path,
+    batch_size: int = 16,
+    checkpoint_path: str | None = None,
+):
+    device = "cuda" if torch.cuda.is_available() else "cpu"
 
     model = build_model(
         checkpoint_path=checkpoint_path,
         device=device,
     )
 
-    all_features = []
-    all_paths = []
-
-    with torch.no_grad():
-        for images, paths in tqdm(loader, desc=f"Extracting {image_dir}"):
-            images = images.to(device)
-
-            features = model(images)
-
-            all_features.append(features.cpu())
-            all_paths.extend(paths)
-
-    all_features = torch.cat(all_features, dim=0)
-
-    return all_features, all_paths
+    return extract_with_model(
+        model=model,
+        image_dir=image_dir,
+        device=device,
+        batch_size=batch_size,
+    )
 
 
 def main():

@@ -11,11 +11,33 @@ can be more robust to viewpoint and appearance changes.
 
 ## Overview
 
-The current baseline uses a pretrained ResNet18 as a global image descriptor:
+The system is a four-stage loop-closure front end:
 
 ```text
-image -> ResNet18 backbone -> 512-D feature -> L2 normalization -> cosine retrieval
+                 ┌──────────────────────────────────────────────────┐
+ query image ──► │ ① Retrieval                                      │
+                 │    ResNet18 -> GAP -> 512-D -> L2 norm -> cosine  │
+                 └───────────────────────┬──────────────────────────┘
+                                         │ Top-K candidates
+                 ┌───────────────────────▼──────────────────────────┐
+                 │ ② Sequence re-ranking                            │
+                 │    aggregate along the diagonal of the           │
+                 │    similarity matrix (simplified SeqSLAM)        │
+                 └───────────────────────┬──────────────────────────┘
+                                         │ re-ranked candidates
+                 ┌───────────────────────▼──────────────────────────┐
+                 │ ③ Geometric verification (ORB + RANSAC)          │
+                 │    used as an accept/reject gate, not a ranker   │
+                 └───────────────────────┬──────────────────────────┘
+                                         │ inlier count
+                 ┌───────────────────────▼──────────────────────────┐
+                 │ ④ Accept / reject by inlier threshold            │
+                 └──────────────────────────────────────────────────┘
 ```
+
+Stage ① alone is the original baseline. Stages ②–④ were added in v2, together with a
+validation-driven training loop. See [`docs/experiments.md`](docs/experiments.md) for the
+full ablation, including the negative results.
 
 The final classifier layer of ResNet18 is removed, so the model is used as a
 feature extractor rather than an ImageNet classifier. Since the output features
@@ -159,6 +181,19 @@ python -m src.evaluate \
 The tolerance means that a match is treated as correct if the database image
 index is within `±3` frames of the query image index.
 
+`--top-k` must be at least `max(--recall-ks)`; the evaluator now fails fast instead of
+silently truncating the slice and reporting a wrong `recall@10`.
+
+Sequence re-ranking and geometric verification are opt-in:
+
+```bash
+# 序列匹配：causal 只用过去帧（在线 SLAM 条件），不加则用前后帧
+python -m src.evaluate ... --seq-window 15 --seq-causal
+
+# 几何验证：gate = 接受/拒绝（默认），rerank = 按内点数重排（实测有害，见 docs/experiments.md）
+python -m src.evaluate ... --geometric-verify --geometric-mode gate --inlier-threshold 20
+```
+
 To evaluate a held-out segment, use `--split-name`, `--min-index`, and
 `--max-index`:
 
@@ -202,6 +237,26 @@ python -m src.train_triplet \
   --max-index 69
 ```
 
+The v2 recipe adds a validation split so that model selection is driven by real retrieval
+metrics rather than by training loss:
+
+```bash
+python -m src.train_triplet \
+  --anchor-dir data/gardens_point/query/night_right \
+  --database-dir data/gardens_point/database/day_left \
+  --output outputs/checkpoints/resnet18_v2.pt \
+  --epochs 8 --batch-size 16 --lr 1e-4 --margin 0.2 \
+  --min-index 0 --max-index 59 \
+  --db-max-index 56 \
+  --val-min-index 60 --val-max-index 69 \
+  --early-stop-patience 4
+```
+
+- `--val-*` enables per-epoch Recall@K evaluation, best-checkpoint saving and early stopping
+- `--db-max-index` truncates the database during training so it does not touch the
+  validation/test region (purged split)
+- `--no-augment` / `--no-schedule` disable ColorJitter / cosine decay for ablations
+
 ## Results
 
 Using 100 database images from `day_left` and 200 query images from `day_right`
@@ -216,30 +271,55 @@ These results show that pretrained ResNet18 descriptors handle moderate lateral
 viewpoint changes well, but performance drops under stronger day-night
 appearance changes.
 
-After triplet-loss fine-tuning on the full `night_right` sequence, retrieval
-improves substantially:
+### Held-out ablation
 
-| Query split | Recall@1 | Recall@5 | Recall@10 | Precision@5 |
-| --- | ---: | ---: | ---: | ---: |
-| `day_right` | 0.9900 | 1.0000 | 1.0000 | 0.8800 |
-| `night_right` | 0.8600 | 1.0000 | 1.0000 | 0.7820 |
+All rows below are evaluated on the **held-out segment `night_right` Image070–099**
+(30 queries), which never participates in training. Training uses `000-059`,
+validation `060-069`, and the database is truncated to `056` during training to
+leave a purged gap.
 
-This shows that metric learning can reshape the embedding space so that
-day-night images of the same place become closer while distant places are pushed
-apart.
+Reproduce with `bash scripts/run_ablation.sh night_right`.
 
-For a stricter test, the triplet model was trained only on
-`night_right/Image000.jpg` to `Image069.jpg`, then evaluated on the held-out
-`Image070.jpg` to `Image099.jpg` segment:
+| # | Configuration | R@1 | R@5 | R@10 | P@5 | R@100%P |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| ① | Baseline (pretrained, no training) | 0.500 | 0.767 | 0.900 | 0.433 | 0.000 |
+| ② | v1 triplet (fixed 5 epochs, no validation/augmentation) | 0.567 | 1.000 | 1.000 | 0.493 | 0.133 |
+| ③ | **v2 triplet** (BN fix + ColorJitter + AdamW + early stopping) | **0.633** | 0.967 | 1.000 | **0.607** | 0.033 |
+| ④ | ③ + sequence matching (**causal**, online condition) | **1.000** | 1.000 | 1.000 | 0.893 | **1.000** |
+| ⑤ | ③ + sequence matching (non-causal) | **1.000** | 1.000 | 1.000 | **0.913** | **1.000** |
+| ⑥ | ⑤ + geometric verification (**gate** mode) | 1.000 | 1.000 | 1.000 | 0.913 | 1.000 |
+| ⑦ | ⑤ + geometric verification (**re-rank** mode) — negative result | 0.667 | 1.000 | 1.000 | 0.647 | 0.033 |
 
-| Evaluation split | Recall@1 | Recall@5 | Recall@10 | Precision@5 |
-| --- | ---: | ---: | ---: | ---: |
-| `night_right` train `000-069` | 0.9143 | 1.0000 | 1.0000 | 0.8229 |
-| `night_right` test `070-099` | 0.5667 | 1.0000 | 1.0000 | 0.4933 |
+**Important caveats — please read `docs/experiments.md` before citing these numbers:**
 
-The gap between train and held-out test performance indicates overfitting in
-top-1 ranking, but the perfect held-out Recall@5 suggests that the fine-tuned
-descriptor remains useful for loop-closure candidate retrieval.
+- The `R@1 = 1.000` in ④/⑤ comes **almost entirely from sequence matching, not from
+  training**: applying the same sequence matching to the *untrained baseline* features
+  also reaches 1.000. A control that shuffles the query temporal order drops it to 0.300,
+  confirming the gain is genuinely temporal rather than an artifact.
+- Gardens Point sequences are **frame-aligned** and traversed at near-constant speed, which
+  perfectly satisfies the sequence-matching assumption. Real deployments vary in speed and
+  direction, so the gain would be smaller.
+- Row ③ trains on 10 fewer frames than ② (they became the validation split), so it is not a
+  free improvement. Its `R@5` and `R@100%P` are slightly *worse*; with only 30 queries a
+  single query is 3.3 points, so those differences are within noise.
+- Row ⑦ is kept deliberately as a **negative result**. ORB inlier counts carry essentially no
+  signal across day–night pairs (correct 25.1 vs incorrect 24.4 inliers), so re-ranking by
+  them destroys a correct ranking. Geometric verification belongs in an accept/reject gate,
+  not in a ranker.
+
+### Training curve: loss does not track retrieval quality
+
+```text
+Epoch 1: loss 0.1246 | val R@1 0.8000   <- best
+Epoch 2: loss 0.0308 | val R@1 0.7000
+Epoch 3: loss 0.0085 | val R@1 0.6000
+Epoch 4: loss 0.0052 | val R@1 0.5000
+Epoch 5: loss 0.0020 | val R@1 0.3000   -> early stop
+```
+
+Training loss falls monotonically to 0.002 while validation Recall@1 falls monotonically
+from 0.80 to 0.30. The original fixed 5-epoch schedule was training four epochs too long,
+and without a validation split this is completely invisible.
 
 ## Qualitative Examples
 
@@ -287,13 +367,30 @@ High recall is important because the correct place must appear among the
 candidates. High precision is also important because false loop closures can
 damage the pose graph or map.
 
+Three findings from the v2 ablation sharpen this picture:
+
+1. **Validation-driven model selection mattered more than any modelling change.** The fixed
+   5-epoch schedule was training four epochs past the optimum, which is invisible if you only
+   watch the loss.
+2. **Sequence matching dominates on this dataset** — zero training, zero learned parameters,
+   and it saturates Recall@1 on the held-out segment. Its gain, however, rests on the
+   trajectory being continuous and traversed at a stable speed.
+3. **ORB-based geometric verification does not transfer across day–night pairs**
+   (correct 25.1 vs incorrect 24.4 inliers, i.e. chance level), while on same-domain pairs it
+   separates cleanly (134.7 vs 26.1). This independently confirms why learned descriptors are
+   needed here in the first place.
+
 ## Next Steps
 
-- Add more systematic failure analysis.
-- Compare ResNet18 with MobileNetV2, ResNet50, or EfficientNet.
-- Add hard negative mining for more challenging place recognition.
-- Explore sequence-based matching for smoother retrieval over trajectories.
-- Add geometric verification with local features as a SLAM-style post-filter.
+- Replace ORB with learned local features (SuperPoint + LightGlue) so that geometric
+  verification also works across day–night pairs.
+- Add hard negative mining (semi-hard) — 24% of randomly sampled triplets already produce
+  zero gradient at the start of training.
+- Evaluate in an open-set setting with distractors and "no loop closure" negatives, so that
+  the accept/reject gate can actually be measured.
+- Multi-velocity sequence search instead of assuming a fixed 1:1 frame alignment.
+- Swap GAP for GeM pooling and add PCA-whitening.
+- Validate on a standard benchmark (Nordland / Pitts30k / MSLS) with metric ground truth.
 
 ## Notes
 

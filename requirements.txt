@@ -1,0 +1,13 @@
+# PyTorch 需按 CUDA 版本单独安装，见 README：
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+torch
+torchvision
+
+numpy
+pillow
+matplotlib
+tqdm
+scikit-learn
+
+# 几何验证（ORB + RANSAC）
+opencv-python
