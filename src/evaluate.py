@@ -157,6 +157,7 @@ def apply_geometric_verification(
     top_scores: torch.Tensor,
     inlier_threshold: int,
     mode: str = "gate",
+    verifier: str = "orb",
 ):
     """对每个 query 的 Top-K 候选跑 ORB+RANSAC 几何验证。
 
@@ -183,7 +184,10 @@ def apply_geometric_verification(
     而 CNN 的 top-1 已经相当准，用一个高方差信号去重排只会把对的挤下去。
     这就是为什么几何验证在真实 SLAM 里是【门控】而不是【排序器】。
     """
-    from src.geometric_verification import verify_candidates
+    if verifier == "lightglue":
+        from src.learned_matching import verify_candidates
+    else:
+        from src.geometric_verification import verify_candidates
 
     num_queries, k = top_indices.shape
     new_indices = top_indices.clone()
@@ -271,6 +275,11 @@ def main():
         "--geometric-mode", choices=["gate", "rerank"], default="gate",
         help="gate=只做接受/拒绝(默认，ORB-SLAM 的用法)；rerank=按内点数重排(实测有害)",
     )
+    parser.add_argument(
+        "--verifier", choices=["orb", "lightglue"], default="orb",
+        help="orb=手工特征(快，但跨昼夜判别力等同随机)；"
+             "lightglue=DISK+LightGlue 学习型特征(慢约2倍，跨昼夜判别力恢复)",
+    )
     parser.add_argument("--inlier-threshold", type=int, default=20)
     args = parser.parse_args()
 
@@ -335,6 +344,7 @@ def main():
                 top_scores=top_scores,
                 inlier_threshold=args.inlier_threshold,
                 mode=args.geometric_mode,
+                verifier=args.verifier,
             )
 
         metrics = evaluate_retrieval(
@@ -375,7 +385,7 @@ def _describe_config(args, threshold) -> list[str]:
         )
     if args.geometric_verify:
         lines.append(
-            f"几何验证: ORB+RANSAC mode={args.geometric_mode} "
+            f"几何验证: {args.verifier}+RANSAC mode={args.geometric_mode} "
             f"inlier_threshold={args.inlier_threshold}"
         )
     if threshold != float("inf"):
