@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from src.dataset import ImageFolderDataset, get_default_transform
-from src.models import ResNet18FeatureExtractor
+from src.backbones import build_backbone
 
 
 def build_model(
@@ -14,12 +14,21 @@ def build_model(
     device: str,
     pooling: str = "gap",
     gem_p: float = 3.0,
+    backbone: str = "resnet18",
+    dinov2_aggregation: str = "gem",
 ):
     use_pretrained = checkpoint_path is None
 
-    model = ResNet18FeatureExtractor(
-        pretrained=use_pretrained, pooling=pooling, gem_p=gem_p
+    model = build_backbone(
+        name=backbone,
+        pretrained=use_pretrained,
+        pooling=pooling,
+        gem_p=gem_p,
+        dinov2_aggregation=dinov2_aggregation,
     )
+
+    if checkpoint_path is not None and backbone != "resnet18":
+        raise ValueError("DINOv2 走的是零训练路线，不支持加载 checkpoint")
 
     if checkpoint_path is not None:
         checkpoint = torch.load(checkpoint_path, map_location="cpu")
@@ -94,6 +103,8 @@ def extract_features(
     pooling: str = "gap",
     gem_p: float = 3.0,
     image_size: int = 224,
+    backbone: str = "resnet18",
+    dinov2_aggregation: str = "gem",
 ):
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -102,6 +113,8 @@ def extract_features(
         device=device,
         pooling=pooling,
         gem_p=gem_p,
+        backbone=backbone,
+        dinov2_aggregation=dinov2_aggregation,
     )
 
     return extract_with_model(
@@ -125,6 +138,14 @@ def main():
     )
     parser.add_argument("--gem-p", type=float, default=3.0)
     parser.add_argument(
+        "--backbone", type=str, default="resnet18",
+        help="resnet18 | dinov2_vits14 | dinov2_vitb14。DINOv2 是零训练路线",
+    )
+    parser.add_argument(
+        "--dinov2-aggregation", choices=["cls", "mean", "gem", "cls+gem"], default="gem",
+        help="DINOv2 怎么把 patch token 聚合成一个向量。AnyLoc 的结论是 patch 聚合优于 CLS",
+    )
+    parser.add_argument(
         "--image-size", type=int, default=224,
         help="输入分辨率。backbone 是全卷积+自适应池化，改这个不需要动模型代码",
     )
@@ -137,6 +158,8 @@ def main():
         pooling=args.pooling,
         gem_p=args.gem_p,
         image_size=args.image_size,
+        backbone=args.backbone,
+        dinov2_aggregation=args.dinov2_aggregation,
     )
 
     output_path = Path(args.output)
@@ -149,8 +172,8 @@ def main():
             "features": features,
             "paths": paths,
             "meta": {
-                "backbone": "resnet18",
-                "pooling": args.pooling,
+                "backbone": args.backbone,
+                "pooling": args.pooling if args.backbone == "resnet18" else args.dinov2_aggregation,
                 "gem_p": args.gem_p if args.pooling == "gem" else None,
                 "image_size": args.image_size,
                 "checkpoint": args.checkpoint,
@@ -162,8 +185,9 @@ def main():
 
     print(f"Saved {len(paths)} features to {output_path}")
     print(f"Feature shape: {features.shape}")
-    print(f"Config: pooling={args.pooling}, image_size={args.image_size}, "
-          f"checkpoint={args.checkpoint}")
+    print(f"Config: backbone={args.backbone}, "
+          f"pooling={args.pooling if args.backbone == 'resnet18' else args.dinov2_aggregation}, "
+          f"image_size={args.image_size}, checkpoint={args.checkpoint}")
 
 
 if __name__ == "__main__":
