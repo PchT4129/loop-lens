@@ -150,6 +150,110 @@ def recall_at_full_precision(
     return best_recall, best_threshold
 
 
+def open_set_metrics(
+    query_paths: list[str],
+    database_paths: list[str],
+    top_indices: torch.Tensor,
+    confidences: torch.Tensor,
+    tolerance: int,
+    threshold: float,
+) -> dict[str, float]:
+    """开集评测：有些 query 在 database 里【根本没有正确答案】，系统应该拒绝它们。
+
+    为什么需要这个
+    --------------
+    闭集设定下每个 query 必有正确答案，于是"拒绝"这个动作永远是错的，
+    门控机制的价值完全无法衡量——这也是 v2 里 `--geometric-mode gate`
+    的指标恒等于不加门控的原因。
+
+    但真实 SLAM 里**绝大多数时刻机器人都在新地方**，"没有回环"才是常态，
+    而误报一次回环就可能撕坏整张地图。所以"能不能正确地拒绝"才是关键能力。
+
+    构造方式：把 database 的某个帧号区间移除，那么 query 里对应那段的
+    就成了"应该被拒绝"的样本。不需要额外数据。
+
+    四种结果：
+                     应该接受            应该拒绝
+        系统接受     TP(且检索对)        FP ← 灾难性的假阳性回环
+        系统拒绝     FN                  TN
+    """
+    database_indices = [image_index_from_path(p) for p in database_paths]
+
+    tp = fp = fn = tn = 0
+    num_with_match = 0
+
+    for query_idx, query_path in enumerate(query_paths):
+        query_index = image_index_from_path(query_path)
+
+        # 这个 query 在【过滤后的】database 里还有没有正确答案？
+        has_match = any(abs(d - query_index) <= tolerance for d in database_indices)
+        num_with_match += int(has_match)
+
+        accepted = confidences[query_idx].item() >= threshold
+        top1_correct = is_correct_match(
+            query_path, database_paths[top_indices[query_idx, 0].item()], tolerance
+        )
+
+        if accepted and top1_correct:
+            tp += 1
+        elif accepted:
+            fp += 1               # 断言了一个回环，但它是错的
+        elif has_match:
+            fn += 1               # 本该找到却拒绝了
+        else:
+            tn += 1               # 正确地拒绝了
+
+    precision = tp / max(tp + fp, 1)
+    recall = tp / max(num_with_match, 1)
+    f1 = 2 * precision * recall / max(precision + recall, 1e-12)
+
+    return {
+        "open_set/precision": precision,
+        "open_set/recall": recall,
+        "open_set/f1": f1,
+        "open_set/TP": tp,
+        "open_set/FP": fp,
+        "open_set/FN": fn,
+        "open_set/TN": tn,
+        "open_set/num_with_match": num_with_match,
+        "open_set/num_without_match": len(query_paths) - num_with_match,
+    }
+
+
+def sweep_open_set(
+    query_paths: list[str],
+    database_paths: list[str],
+    top_indices: torch.Tensor,
+    confidences: torch.Tensor,
+    tolerance: int,
+) -> dict[str, float]:
+    """扫描置信度阈值，找最佳 F1 和零假阳性下的最大召回。"""
+    thresholds = sorted({c.item() for c in confidences} | {0.0})
+
+    best_f1 = {"open_set/best_f1": 0.0, "open_set/best_f1_threshold": 0.0}
+    recall_at_100p = 0.0
+    threshold_at_100p = float("inf")
+
+    for threshold in thresholds:
+        m = open_set_metrics(
+            query_paths, database_paths, top_indices, confidences, tolerance, threshold
+        )
+        if m["open_set/f1"] > best_f1["open_set/best_f1"]:
+            best_f1 = {
+                "open_set/best_f1": m["open_set/f1"],
+                "open_set/best_f1_threshold": threshold,
+            }
+        if m["open_set/precision"] >= 1.0 and m["open_set/recall"] > recall_at_100p:
+            recall_at_100p = m["open_set/recall"]
+            threshold_at_100p = threshold
+
+    return {
+        **best_f1,
+        "open_set/recall@100%precision": recall_at_100p,
+        "open_set/threshold@100%precision": threshold_at_100p,
+    }
+
+
 def apply_geometric_verification(
     query_paths: list[str],
     database_paths: list[str],
@@ -276,6 +380,11 @@ def main():
         help="gate=只做接受/拒绝(默认，ORB-SLAM 的用法)；rerank=按内点数重排(实测有害)",
     )
     parser.add_argument(
+        "--db-exclude-range", type=int, nargs=2, default=None, metavar=("LO", "HI"),
+        help="从 database 中移除该帧号区间，构造【开集】：落在这段的 query "
+             "将没有正确答案、应该被系统拒绝。不传则是闭集（每个 query 必有答案）",
+    )
+    parser.add_argument(
         "--verifier", choices=["orb", "lightglue"], default="orb",
         help="orb=手工特征(快，但跨昼夜判别力等同随机)；"
              "lightglue=DISK+LightGlue 学习型特征(慢约2倍，跨昼夜判别力恢复)",
@@ -296,6 +405,18 @@ def main():
 
     database_features, database_paths = load_feature_file(args.database)
     query_features, query_paths = load_feature_file(args.query)
+
+    if args.db_exclude_range is not None:
+        lo, hi = args.db_exclude_range
+        keep = [
+            i for i, p in enumerate(database_paths)
+            if not (lo <= image_index_from_path(p) <= hi)
+        ]
+        removed = len(database_paths) - len(keep)
+        database_features = database_features[keep]
+        database_paths = [database_paths[i] for i in keep]
+        print(f"[开集] 从 database 移除帧号 {lo}-{hi} 共 {removed} 张，"
+              f"剩余 {len(database_paths)} 张")
 
     split_names = [args.split_name] if args.split_name is not None else [
         "day_right",
@@ -364,6 +485,23 @@ def main():
             tolerance=args.tolerance,
         )
         metrics["recall@100%precision"] = recall_100p
+
+        if args.db_exclude_range is not None:
+            metrics.update(open_set_metrics(
+                query_paths=split_query_paths,
+                database_paths=database_paths,
+                top_indices=split_top_indices,
+                confidences=confidences,
+                tolerance=args.tolerance,
+                threshold=float(args.inlier_threshold) if args.geometric_verify else 0.0,
+            ))
+            metrics.update(sweep_open_set(
+                query_paths=split_query_paths,
+                database_paths=database_paths,
+                top_indices=split_top_indices,
+                confidences=confidences,
+                tolerance=args.tolerance,
+            ))
 
         print_metrics(
             split_name=split_name,
