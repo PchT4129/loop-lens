@@ -5,7 +5,7 @@ from pathlib import Path
 import torch
 
 from src.retrieve import load_feature_file
-from src.sequence_match import sequence_rerank
+from src.sequence_match import parse_velocities, sequence_rerank
 
 
 def image_index_from_path(path: str) -> int:
@@ -259,6 +259,11 @@ def main():
         help="序列匹配只使用过去帧（在线 SLAM 的真实条件）",
     )
     parser.add_argument(
+        "--seq-velocities", type=str, default="1.0",
+        help="序列匹配搜索的速度比，逗号分隔。默认 1.0 假设两次采集速度一致；"
+             "传多个值会在各速度上取最优，代价是误匹配得高分的机会也变多",
+    )
+    parser.add_argument(
         "--geometric-verify", action="store_true",
         help="对 Top-K 候选跑 ORB+RANSAC 几何验证",
     )
@@ -310,7 +315,10 @@ def main():
 
         if args.seq_window > 0:
             similarities = sequence_rerank(
-                similarities, window=args.seq_window, causal=args.seq_causal
+                similarities,
+                window=args.seq_window,
+                causal=args.seq_causal,
+                velocities=parse_velocities(args.seq_velocities),
             )
 
         top_scores, split_top_indices = torch.topk(
@@ -362,7 +370,9 @@ def _describe_config(args, threshold) -> list[str]:
     lines = []
     if args.seq_window > 0:
         mode = "causal(仅过去帧)" if args.seq_causal else "non-causal(前后帧)"
-        lines.append(f"序列匹配: window=±{args.seq_window} {mode}")
+        lines.append(
+            f"序列匹配: window=±{args.seq_window} {mode} velocities={args.seq_velocities}"
+        )
     if args.geometric_verify:
         lines.append(
             f"几何验证: ORB+RANSAC mode={args.geometric_mode} "
