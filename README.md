@@ -11,38 +11,42 @@ can be more robust to viewpoint and appearance changes.
 
 ## Overview
 
-The system is a four-stage loop-closure front end:
+The system is a four-stage loop-closure front end. Each stage has a classic and a
+modern implementation, selectable from the CLI, so the two can be compared directly:
 
 ```text
-                 ┌──────────────────────────────────────────────────┐
- query image ──► │ ① Retrieval                                      │
-                 │    ResNet18 -> GAP -> 512-D -> L2 norm -> cosine  │
-                 └───────────────────────┬──────────────────────────┘
+                 ┌──────────────────────────────────────────────────────┐
+ query image ──► │ ① Retrieval                                          │
+                 │    classic: ResNet18 -> GAP/GeM -> 512-D -> L2        │
+                 │    modern:  DINOv2 ViT-S/14 -> patch pooling -> 384-D │
+                 └───────────────────────┬──────────────────────────────┘
                                          │ Top-K candidates
-                 ┌───────────────────────▼──────────────────────────┐
-                 │ ② Sequence re-ranking                            │
-                 │    aggregate along the diagonal of the           │
-                 │    similarity matrix (simplified SeqSLAM)        │
-                 └───────────────────────┬──────────────────────────┘
+                 ┌───────────────────────▼──────────────────────────────┐
+                 │ ② Sequence re-ranking                                │
+                 │    aggregate along the similarity matrix diagonal,    │
+                 │    optionally searching several velocity ratios       │
+                 └───────────────────────┬──────────────────────────────┘
                                          │ re-ranked candidates
-                 ┌───────────────────────▼──────────────────────────┐
-                 │ ③ Geometric verification (ORB + RANSAC)          │
-                 │    used as an accept/reject gate, not a ranker   │
-                 └───────────────────────┬──────────────────────────┘
+                 ┌───────────────────────▼──────────────────────────────┐
+                 │ ③ Geometric verification                             │
+                 │    classic: ORB + RANSAC                              │
+                 │    modern:  DISK + LightGlue + RANSAC                 │
+                 └───────────────────────┬──────────────────────────────┘
                                          │ inlier count
-                 ┌───────────────────────▼──────────────────────────┐
-                 │ ④ Accept / reject by inlier threshold            │
-                 └──────────────────────────────────────────────────┘
+                 ┌───────────────────────▼──────────────────────────────┐
+                 │ ④ Accept / reject by threshold                       │
+                 │    measurable only under the open-set protocol        │
+                 └──────────────────────────────────────────────────────┘
 ```
 
-Stage ① alone is the original baseline. Stages ②–④ were added in v2, together with a
-validation-driven training loop. See [`docs/experiments.md`](docs/experiments.md) for the
-full ablation, including the negative results.
+Stage ① alone is the original baseline; stages ②–④ and the validation-driven
+training loop were added in v2; the modern variants and the open-set protocol
+in v3. See [`docs/experiments.md`](docs/experiments.md) for the full ablation,
+including the negative results.
 
-The final classifier layer of ResNet18 is removed, so the model is used as a
-feature extractor rather than an ImageNet classifier. Since the output features
-are L2-normalized, dot product between two feature vectors is equivalent to
-cosine similarity.
+Training supports both triplet loss and InfoNCE, with diagnostics that report
+how much of each batch still produces gradient — which turned out to matter
+more than the choice of loss.
 
 ## Project Structure
 
@@ -54,12 +58,23 @@ vpr-loop-closure/
       query/
   outputs/
     visualizations/
+  scripts/
+    run_ablation.sh              # v2 ablation
+    run_ablation_v3.sh           # v3 ablation (classic vs modern)
+  docs/
+    experiments.md               # full ablation with negative results
+    interview/                   # study notes written alongside the code
   src/
+    backbones.py                 # ResNet18 / DINOv2 factory, one contract
     dataset.py
-    evaluate.py
+    evaluate.py                  # metrics, sequence re-rank, gate, open-set
     extract_features.py
-    models.py
+    geometric_verification.py    # ORB + RANSAC
+    learned_matching.py          # DISK + LightGlue + RANSAC
+    losses.py                    # InfoNCE + gradient diagnostics
+    models.py                    # ResNet18 + GAP/GeM pooling
     retrieve.py
+    sequence_match.py            # simplified SeqSLAM, multi-velocity
     train_triplet.py
     triplet_dataset.py
     visualize.py
@@ -273,39 +288,86 @@ appearance changes.
 
 ### Held-out ablation
 
-All rows below are evaluated on the **held-out segment `night_right` Image070–099**
-(30 queries), which never participates in training. Training uses `000-059`,
-validation `060-069`, and the database is truncated to `056` during training to
-leave a purged gap.
+All rows are evaluated on the **held-out segment `night_right` Image070–099**
+(30 queries), which never participates in training. Reproduce with
+`bash scripts/run_ablation_v3.sh`.
 
-Reproduce with `bash scripts/run_ablation.sh night_right`.
+The project was built in two passes: first a classic pipeline (ResNet18 +
+triplet + ORB) to establish where each stage breaks, then each stage swapped
+for a modern replacement, with the earlier measurement as the stated motive.
 
-| # | Configuration | R@1 | R@5 | R@10 | P@5 | R@100%P |
-| --- | --- | ---: | ---: | ---: | ---: | ---: |
-| ① | Baseline (pretrained, no training) | 0.500 | 0.767 | 0.900 | 0.433 | 0.000 |
-| ② | v1 triplet (fixed 5 epochs, no validation/augmentation) | 0.567 | 1.000 | 1.000 | 0.493 | 0.133 |
-| ③ | **v2 triplet** (BN fix + ColorJitter + AdamW + early stopping) | **0.633** | 0.967 | 1.000 | **0.607** | 0.033 |
-| ④ | ③ + sequence matching (**causal**, online condition) | **1.000** | 1.000 | 1.000 | 0.893 | **1.000** |
-| ⑤ | ③ + sequence matching (non-causal) | **1.000** | 1.000 | 1.000 | **0.913** | **1.000** |
-| ⑥ | ⑤ + geometric verification (**gate** mode) | 1.000 | 1.000 | 1.000 | 0.913 | 1.000 |
-| ⑦ | ⑤ + geometric verification (**re-rank** mode) — negative result | 0.667 | 1.000 | 1.000 | 0.647 | 0.033 |
+| # | Configuration | R@1 | R@5 | P@5 | R@100%P |
+| --- | --- | ---: | ---: | ---: | ---: |
+| ① | ResNet18-GAP, pretrained | 0.500 | 0.767 | 0.433 | 0.000 |
+| ② | ResNet18-**GeM**, zero training | 0.533 | 0.800 | 0.407 | 0.000 |
+| ③ | ResNet18-GAP + **triplet** | 0.633 | 0.933 | 0.527 | 0.000 |
+| ④ | ResNet18-GAP + **InfoNCE** | 0.633 | 0.900 | 0.593 | 0.000 |
+| ⑤ | **DINOv2 CLS**, zero training | **0.933** | 0.967 | 0.753 | 0.167 |
+| ⑥ | **DINOv2 patch-mean**, zero training | **0.933** | 0.967 | **0.800** | **0.900** |
+| ⑦ | ⑥ + causal sequence matching | **1.000** | 1.000 | 0.933 | **1.000** |
 
-**Important caveats — please read `docs/experiments.md` before citing these numbers:**
+**Zero-training DINOv2 beats the fine-tuned ResNet18 by 30 points.** With only
+60 training frames, swapping in a feature that already generalises beats
+fine-tuning one that does not — consistent with the 34.8-point generalisation
+gap measured for the fine-tune. On `day_right` (viewpoint change only) every
+configuration sits at 0.94–0.98, so the gain is specific to the cross-domain
+case.
 
-- The `R@1 = 1.000` in ④/⑤ comes **almost entirely from sequence matching, not from
-  training**: applying the same sequence matching to the *untrained baseline* features
-  also reaches 1.000. A control that shuffles the query temporal order drops it to 0.300,
-  confirming the gain is genuinely temporal rather than an artifact.
-- Gardens Point sequences are **frame-aligned** and traversed at near-constant speed, which
-  perfectly satisfies the sequence-matching assumption. Real deployments vary in speed and
-  direction, so the gain would be smaller.
-- Row ③ trains on 10 fewer frames than ② (they became the validation split), so it is not a
-  free improvement. Its `R@5` and `R@100%P` are slightly *worse*; with only 30 queries a
-  single query is 3.3 points, so those differences are within noise.
-- Row ⑦ is kept deliberately as a **negative result**. ORB inlier counts carry essentially no
-  signal across day–night pairs (correct 25.1 vs incorrect 24.4 inliers), so re-ranking by
-  them destroys a correct ranking. Geometric verification belongs in an accept/reject gate,
-  not in a ranker.
+Rows ⑤ and ⑥ are worth a second look: identical Recall@1, but
+Recall@100%Precision differs by 5.4x. Patch aggregation is not just as
+accurate as the CLS token, its similarity scores are far better calibrated —
+which matters more than average accuracy when a single false loop closure can
+tear the map apart.
+
+### Geometric verification: closing a negative result
+
+v2 found that ORB inlier counts carry no signal across day–night pairs and
+argued the cause was the descriptor rather than RANSAC. v3 tests that by
+swapping only the feature and matcher, keeping the RANSAC criterion identical.
+Measured over 32 sample points scored on exactly the same pairs:
+
+| Method | Domain | Correct | Incorrect | Ratio | Separable |
+| --- | --- | ---: | ---: | ---: | ---: |
+| ORB | day_right | 126.5 | 26.9 | 4.7x | 97% |
+| ORB | night_right | 27.0 | 25.7 | **1.1x** | **56%** |
+| DISK+LightGlue | day_right | 446.4 | 9.6 | 46.7x | 100% |
+| DISK+LightGlue | night_right | 62.5 | 9.2 | **6.8x** | **72%** |
+
+Chance level is 50%, so ORB at 56% is effectively random. The failure was in
+the descriptor. Still, 72% remains well short of the 100% seen in-domain, and
+LightGlue's night distribution is heavily skewed (mean 62.5, median 18).
+
+### Open-set evaluation
+
+Removing database frames 30–49 leaves 14 of 100 night queries with no valid
+match, so they *should* be rejected. This is what finally makes the gate and
+Recall@100%Precision measurable — under the closed-set protocol used earlier,
+rejecting was always wrong.
+
+| Configuration | best F1 | R@100%P |
+| --- | ---: | ---: |
+| DINOv2, single frame | 0.874 | 0.233 |
+| + causal sequence matching | **0.912** | **0.686** |
+| + ORB gate | 0.859 | 0.000 |
+| + LightGlue gate | 0.849 | 0.326 |
+
+Sequence matching nearly triples Recall@100%Precision, so it improves not just
+ranking but the reliability of the confidence score. Adding a geometric gate
+then *hurts*, because the current implementation replaces the similarity
+confidence with the inlier count instead of requiring both to pass. Combining
+the two signals is the obvious next step.
+
+**Caveats worth reading before citing any of this** — see
+[`docs/experiments.md`](docs/experiments.md):
+
+- Held-out is 30 queries, so one query is 3.3 points; the validation split is
+  10 frames, so one query is 10 points. Several differences here are noise.
+- Gardens Point sequences are frame-aligned and traversed at near-constant
+  speed, which perfectly satisfies the sequence-matching assumption. Widening
+  the velocity search to 0.5–1.5x drops night Recall@1 from 0.890 to 0.780, so
+  the assumption is doing real work.
+- InfoNCE's mechanism advantage is measurable (gradient diagnostics) but does
+  not translate into a measurable retrieval gain at this dataset size.
 
 ### Training curve: loss does not track retrieval quality
 
