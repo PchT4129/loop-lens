@@ -55,7 +55,11 @@ class TripletPlaceDataset(Dataset):
         max_index: int | None = None,
         db_min_index: int | None = None,
         db_max_index: int | None = None,
+        return_negative: bool = True,
     ):
+        # InfoNCE 模式下 batch 内的其他 positive 就充当负样本，
+        # 不需要单独采样 negative——省掉三分之一的读盘和前向。
+        self.return_negative = return_negative
         self.anchor_paths = filter_by_index(
             find_images(anchor_dir), min_index, max_index
         )
@@ -94,32 +98,36 @@ class TripletPlaceDataset(Dataset):
             if abs(self.database_indices[path] - anchor_index) <= self.positive_tolerance
         ]
 
+        if len(positive_candidates) == 0:
+            raise ValueError(f"No positive candidates found for {anchor_path}")
+
+        positive_path = random.choice(positive_candidates)
+
+        sample = {
+            "anchor": self._load_image(anchor_path),
+            "positive": self._load_image(positive_path),
+            "anchor_path": str(anchor_path),
+            "positive_path": str(positive_path),
+            # 帧号：InfoNCE 需要它来判断 batch 内哪些配对不能当负样本
+            "anchor_index": anchor_index,
+            "positive_index": self.database_indices[positive_path],
+        }
+
+        if not self.return_negative:
+            return sample
+
         negative_candidates = [
             path
             for path in self.database_paths
             if abs(self.database_indices[path] - anchor_index) >= self.negative_gap
         ]
-
-        if len(positive_candidates) == 0:
-            raise ValueError(f"No positive candidates found for {anchor_path}")
         if len(negative_candidates) == 0:
             raise ValueError(f"No negative candidates found for {anchor_path}")
 
-        positive_path = random.choice(positive_candidates)
         negative_path = random.choice(negative_candidates)
-
-        anchor_image = self._load_image(anchor_path)
-        positive_image = self._load_image(positive_path)
-        negative_image = self._load_image(negative_path)
-
-        return {
-            "anchor": anchor_image,
-            "positive": positive_image,
-            "negative": negative_image,
-            "anchor_path": str(anchor_path),
-            "positive_path": str(positive_path),
-            "negative_path": str(negative_path),
-        }
+        sample["negative"] = self._load_image(negative_path)
+        sample["negative_path"] = str(negative_path)
+        return sample
 
     def _load_image(self, path: Path):
         image = Image.open(path).convert("RGB")

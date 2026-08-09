@@ -1,4 +1,5 @@
 import argparse
+import random
 from pathlib import Path
 
 import torch
@@ -8,35 +9,66 @@ from tqdm import tqdm
 from src.dataset import get_default_transform, get_train_transform
 from src.evaluate import evaluate_retrieval, image_index_from_path
 from src.extract_features import extract_with_model
+from src.losses import (
+    build_invalid_negative_mask,
+    info_nce_loss,
+    infonce_diagnostics,
+)
 from src.models import ResNet18FeatureExtractor
 from src.retrieve import retrieve_top_k
 from src.triplet_dataset import TripletPlaceDataset
 
 
-def train_one_epoch(model, loader, criterion, optimizer, device):
+def train_one_epoch(model, loader, criterion, optimizer, device, loss_type="triplet",
+                    tau=0.07, negative_gap=20):
     model.train()
 
     total_loss = 0.0
+    total_zero_grad = 0          # loss 恰好为 0 的样本数（triplet 才会出现）
+    diag_sum = {"valid_negatives": 0.0, "top1_acc": 0.0, "effective_negs": 0.0}
+    num_batches = 0
 
     for batch in tqdm(loader, desc="Training", leave=False):
         anchor = batch["anchor"].to(device)
         positive = batch["positive"].to(device)
-        negative = batch["negative"].to(device)
 
-        # 三个分支【合并成一个 batch 做一次 forward】。
+        # 各分支【合并成一个 batch 做一次 forward】。
         #
-        # 之前的写法是分三次 forward，那样有个隐蔽的问题：anchor 全是夜间图、
+        # 之前的写法是分开 forward，那样有个隐蔽的问题：anchor 全是夜间图、
         # positive/negative 全是白天图，train() 模式下 BatchNorm 用的是当前 batch
         # 的统计量，于是 anchor 和 positive 实际上被【两个不同的归一化函数】处理，
         # 输出根本不在同一个空间里——而 loss 却在计算它们之间的距离。
         # 实测：分开 vs 合并，anchor 特征余弦仅 0.8655，训练信号差 24%。
         #
-        # 合并之后 BN 看到的是昼夜混合分布，三个分支共用同一套归一化，
-        # 而且一次 forward 比三次的 GPU 利用率更高，顺带还更快。
-        merged = torch.cat([anchor, positive, negative], dim=0)
-        anchor_features, positive_features, negative_features = model(merged).chunk(3, dim=0)
+        # 合并之后 BN 看到的是昼夜混合分布，各分支共用同一套归一化，
+        # 而且一次 forward 比多次的 GPU 利用率更高，顺带还更快。
+        if loss_type == "triplet":
+            negative = batch["negative"].to(device)
+            merged = torch.cat([anchor, positive, negative], dim=0)
+            a_f, p_f, n_f = model(merged).chunk(3, dim=0)
+            loss = criterion(a_f, p_f, n_f)
 
-        loss = criterion(anchor_features, positive_features, negative_features)
+            # 统计有多少三元组已满足 margin、不再产生梯度
+            with torch.no_grad():
+                per_sample = torch.relu(
+                    (a_f - p_f).norm(dim=1) - (a_f - n_f).norm(dim=1) + criterion.margin
+                )
+                total_zero_grad += int((per_sample == 0).sum())
+        else:
+            merged = torch.cat([anchor, positive], dim=0)
+            a_f, p_f = model(merged).chunk(2, dim=0)
+
+            invalid = build_invalid_negative_mask(
+                batch["anchor_index"].to(device),
+                batch["positive_index"].to(device),
+                negative_gap,
+            )
+            loss = info_nce_loss(a_f, p_f, tau=tau, invalid_mask=invalid)
+
+            d = infonce_diagnostics(a_f, p_f, tau, invalid)
+            for k in diag_sum:
+                diag_sum[k] += d[k]
+            num_batches += 1
 
         #反向传播三部曲
         optimizer.zero_grad() #清空上一次残留梯度（否则梯度累计，不是bug而是特性）
@@ -45,9 +77,14 @@ def train_one_epoch(model, loader, criterion, optimizer, device):
 
         total_loss += loss.item() * anchor.size(0)
 
-    average_loss = total_loss / len(loader.dataset)
-
-    return average_loss
+    n = len(loader.dataset)
+    stats = {"loss": total_loss / n}
+    if loss_type == "triplet":
+        stats["zero_grad_ratio"] = total_zero_grad / n
+    else:
+        for k, v in diag_sum.items():
+            stats[k] = v / max(num_batches, 1)
+    return stats
 
 
 @torch.no_grad()
@@ -147,7 +184,29 @@ def main():
         "--no-schedule", action="store_true",
         help="关闭 cosine 学习率调度（消融实验用）",
     )
+    # --- 损失函数 ---
+    parser.add_argument(
+        "--loss", choices=["triplet", "infonce"], default="triplet",
+        help="triplet 每步只用 1 个负样本且满足 margin 后零梯度；"
+             "infonce 用上 batch 内全部合格负样本，且自带难样本加权",
+    )
+    parser.add_argument(
+        "--tau", type=float, default=0.07,
+        help="InfoNCE 温度。越小越只盯最难的负样本（趋近 hardest mining）",
+    )
+    # --- 池化 ---
+    parser.add_argument("--pooling", choices=["gap", "gem"], default="gap")
+    parser.add_argument("--gem-p", type=float, default=3.0)
+    parser.add_argument(
+        "--seed", type=int, default=0,
+        help="随机种子。验证集只有 10 帧，R@1 的粒度是 0.1，"
+             "不固定种子的话不同次运行会差 1-2 个 query，消融对比就不可信了",
+    )
     args = parser.parse_args()
+
+    random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -161,6 +220,7 @@ def main():
         max_index=args.max_index,
         db_min_index=args.db_min_index,
         db_max_index=args.db_max_index,
+        return_negative=(args.loss == "triplet"),
     )
 
     print(f"训练三元组: {len(dataset)} 个 anchor, {len(dataset.database_paths)} 张 database")
@@ -172,12 +232,11 @@ def main():
         num_workers=2,
     )
 
-    model = ResNet18FeatureExtractor(pretrained=True).to(device)
+    model = ResNet18FeatureExtractor(
+        pretrained=True, pooling=args.pooling, gem_p=args.gem_p
+    ).to(device)
 
-    criterion = torch.nn.TripletMarginLoss(
-        margin=args.margin,
-        p=2,
-    )
+    criterion = torch.nn.TripletMarginLoss(margin=args.margin, p=2)
 
     # AdamW 而非 Adam：Adam 把 weight decay 混进梯度里，会被自适应分母缩放，
     # 导致正则化强度在不同参数上失控。AdamW 把它从梯度中解耦，直接作用于参数。
@@ -214,15 +273,24 @@ def main():
         )
 
     for epoch in range(args.epochs):
-        average_loss = train_one_epoch(
+        stats = train_one_epoch(
             model=model,
             loader=loader,
             criterion=criterion,
             optimizer=optimizer,
             device=device,
+            loss_type=args.loss,
+            tau=args.tau,
+            negative_gap=args.negative_gap,
         )
 
-        line = f"Epoch {epoch + 1}/{args.epochs} - loss: {average_loss:.4f}"
+        line = f"Epoch {epoch + 1}/{args.epochs} - loss: {stats['loss']:.4f}"
+        if args.loss == "triplet":
+            line += f" | 零梯度三元组 {stats['zero_grad_ratio']:.0%}"
+        else:
+            line += (f" | 有效负样本 {stats['valid_negatives']:.1f}"
+                     f" (梯度>1%: {stats['effective_negs']:.1f})"
+                     f" | in-batch top1 {stats['top1_acc']:.2f}")
         val_metrics = None
 
         if do_validate:
