@@ -1,13 +1,18 @@
-# Visual Place Recognition with CNN Global Descriptors
+# Visual Place Recognition for SLAM Loop Closure
 
-This mini project implements a simple visual place recognition (VPR) pipeline in
-PyTorch. Given a query image, the system retrieves visually similar places from a
-database using pretrained CNN features and cosine similarity.
+A loop-closure front end for SLAM: given the current frame, retrieve the same
+place from a database of past keyframes, then decide whether to trust the match.
 
-The project is motivated by loop closure and relocalization in SLAM. Traditional
-SLAM systems often rely on handcrafted local features and geometric verification,
-while learning-based VPR methods learn compact scene-level representations that
-can be more robust to viewpoint and appearance changes.
+The interesting part of the problem is that the two failure modes pull in
+opposite directions. The same place can look completely different across day and
+night, while two different corridors can look nearly identical. And the cost is
+asymmetric: a missed loop closure just delays a correction, but a false one
+welds two unrelated places together and can distort the whole map irreversibly.
+
+The project is built as a **classic-versus-modern comparison**. Each stage has
+two implementations — hand-crafted or CNN on one side, self-supervised
+transformer or learned matcher on the other — and every swap is motivated by a
+measurement from the previous stage rather than by "this one is newer".
 
 ## Overview
 
@@ -122,8 +127,12 @@ Install PyTorch with CUDA support, then install the remaining dependencies:
 
 ```bash
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
-pip install numpy pillow matplotlib tqdm scikit-learn
+pip install -r requirements.txt
 ```
+
+`opencv-python` is needed for ORB geometric verification and `kornia` for the
+DISK + LightGlue path. DINOv2 weights (~85 MB for ViT-S/14) are pulled from
+`torch.hub` on first use.
 
 Verify CUDA:
 
@@ -156,13 +165,28 @@ python -m src.extract_features \
   --output outputs/gardens_query_features.pt
 ```
 
-Each `.pt` file stores:
+Each `.pt` file stores the features, their source paths, and the configuration
+they were produced with — earlier versions stored only the first two, which meant
+guessing from the filename which checkpoint and resolution a file came from:
 
 ```python
 {
-    "features": Tensor[N, 512],
+    "features": Tensor[N, D],        # D = 512 (ResNet18) or 384 (DINOv2 ViT-S/14)
     "paths": list[str],
+    "meta": {"backbone": ..., "pooling": ..., "image_size": ..., "checkpoint": ...},
 }
+```
+
+Backbone, pooling and resolution are all flags. The backbone is fully
+convolutional with adaptive pooling (and DINOv2 is a ViT), so changing
+resolution needs no model changes:
+
+```bash
+# GeM pooling instead of GAP
+python -m src.extract_features ... --pooling gem
+
+# DINOv2, zero training. Note patch size 14, so use multiples of 14 (224, 448)
+python -m src.extract_features ... --backbone dinov2_vits14 --dinov2-aggregation mean
 ```
 
 To extract features with a triplet fine-tuned checkpoint, pass `--checkpoint`:
@@ -199,14 +223,23 @@ index is within `±3` frames of the query image index.
 `--top-k` must be at least `max(--recall-ks)`; the evaluator now fails fast instead of
 silently truncating the slice and reporting a wrong `recall@10`.
 
-Sequence re-ranking and geometric verification are opt-in:
+Sequence re-ranking, geometric verification and the open-set protocol are opt-in:
 
 ```bash
-# 序列匹配：causal 只用过去帧（在线 SLAM 条件），不加则用前后帧
-python -m src.evaluate ... --seq-window 15 --seq-causal
+# Sequence matching. --seq-causal uses only past frames, matching the online
+# SLAM constraint. --seq-velocities searches several speed ratios; widening it
+# is not free, see docs/experiments.md
+python -m src.evaluate ... --seq-window 15 --seq-causal --seq-velocities 0.9,1.0,1.1
 
-# 几何验证：gate = 接受/拒绝（默认），rerank = 按内点数重排（实测有害，见 docs/experiments.md）
-python -m src.evaluate ... --geometric-verify --geometric-mode gate --inlier-threshold 20
+# Geometric verification. gate = accept/reject (default), rerank = reorder by
+# inlier count (measurably harmful). orb is fast, lightglue works across
+# day-night where orb is at chance level
+python -m src.evaluate ... --geometric-verify --verifier lightglue --geometric-mode gate
+
+# Open-set: drop a database frame range so some queries have no valid match and
+# *should* be rejected. Without this, rejecting is always wrong and the gate
+# cannot be measured at all
+python -m src.evaluate ... --db-exclude-range 30 49
 ```
 
 To evaluate a held-out segment, use `--split-name`, `--min-index`, and
@@ -271,6 +304,21 @@ python -m src.train_triplet \
 - `--db-max-index` truncates the database during training so it does not touch the
   validation/test region (purged split)
 - `--no-augment` / `--no-schedule` disable ColorJitter / cosine decay for ablations
+- `--seed` matters here: the validation split is 10 frames, so Recall@1 moves by
+  0.1 per query and ablations are not comparable without it
+
+InfoNCE is available as an alternative loss. It uses every valid in-batch
+negative rather than one sampled negative, and weights each by its softmax
+probability, so hard negatives get more gradient with no explicit mining:
+
+```bash
+python -m src.train_triplet ... --loss infonce --batch-size 60 --tau 0.2
+```
+
+Both losses report how much of each batch still produces gradient, which turned
+out to matter more than the choice of loss — triplet reaches 98% zero-gradient
+triplets by epoch 6, and InfoNCE saturates too when the batch is small enough
+that the in-batch task becomes trivial. See `docs/experiments.md`.
 
 ## Results
 
@@ -412,47 +460,65 @@ illumination changes and visually similar corridor-like structures.
 
 ## Discussion
 
-This baseline demonstrates that off-the-shelf CNN global descriptors are already
-useful for visual place recognition. However, the performance gap between
-`day_right` and `night_right` highlights the difficulty of appearance changes.
-Triplet-loss fine-tuning improves day-night retrieval, but the held-out split
-shows why train/test separation is necessary when judging generalization.
-
-In a SLAM system, this type of VPR module would typically be used as a candidate
-retrieval stage:
+In a SLAM system this module sits at the front of a funnel that tightens stage
+by stage:
 
 ```text
-query image -> top-k place candidates -> geometric verification -> loop closure
+query image -> top-k candidates -> geometric verification -> consistency check -> loop closure
 ```
 
-High recall is important because the correct place must appear among the
-candidates. High precision is also important because false loop closures can
-damage the pose graph or map.
+The first stage should favour recall: a correct place only has to reach the
+candidate list, because later stages can reject the wrong ones — but anything
+missed here is unrecoverable. Final precision is the later stages' job. That is
+why Recall@K is the headline retrieval metric, while Recall@100%Precision is the
+one that reflects what SLAM actually needs.
 
-Three findings from the v2 ablation sharpen this picture:
+Five findings shaped how this project ended up:
 
-1. **Validation-driven model selection mattered more than any modelling change.** The fixed
-   5-epoch schedule was training four epochs past the optimum, which is invisible if you only
-   watch the loss.
-2. **Sequence matching dominates on this dataset** — zero training, zero learned parameters,
-   and it saturates Recall@1 on the held-out segment. Its gain, however, rests on the
-   trajectory being continuous and traversed at a stable speed.
-3. **ORB-based geometric verification does not transfer across day–night pairs**
-   (correct 25.1 vs incorrect 24.4 inliers, i.e. chance level), while on same-domain pairs it
-   separates cleanly (134.7 vs 26.1). This independently confirms why learned descriptors are
-   needed here in the first place.
+1. **Validation-driven model selection mattered more than any modelling change.**
+   The fixed 5-epoch schedule was training four epochs past the optimum —
+   invisible if you only watch the loss, which fell to 0.002 while validation
+   Recall@1 fell to 0.30.
+
+2. **The fine-tuning result was better read as a diagnosis than as a result.**
+   A 34.8-point generalisation gap says the model memorised 60 frames rather
+   than learning something transferable. That pointed at the feature, not the
+   training recipe — and swapping in zero-training DINOv2 gained 30 points where
+   fine-tuning had gained 13.
+
+3. **Sequence matching is the single largest lever on this dataset**, and it
+   improves confidence calibration as much as ranking: Recall@100%Precision goes
+   from 0.233 to 0.686. But the gain rests on the trajectory being continuous and
+   traversed at a stable speed, which Gardens Point satisfies unusually well.
+
+4. **A negative result was worth as much as a positive one.** ORB inlier counts
+   sit at chance level across day–night pairs. The claim that this was the
+   descriptor's fault rather than RANSAC's was testable, and swapping in
+   DISK + LightGlue under an identical RANSAC criterion recovered separation from
+   1.1x to 6.8x.
+
+5. **Recall@1 hides things.** DINOv2's CLS and patch-mean aggregations score
+   identically on Recall@1 (0.933) but differ 5.4x on Recall@100%Precision. When
+   one false loop closure can tear the map apart, how trustworthy the top
+   prediction is matters more than how often it is right on average.
 
 ## Next Steps
 
-- Replace ORB with learned local features (SuperPoint + LightGlue) so that geometric
-  verification also works across day–night pairs.
-- Add hard negative mining (semi-hard) — 24% of randomly sampled triplets already produce
-  zero gradient at the start of training.
-- Evaluate in an open-set setting with distractors and "no loop closure" negatives, so that
-  the accept/reject gate can actually be measured.
-- Multi-velocity sequence search instead of assuming a fixed 1:1 frame alignment.
-- Swap GAP for GeM pooling and add PCA-whitening.
-- Validate on a standard benchmark (Nordland / Pitts30k / MSLS) with metric ground truth.
+Ordered by how much they would change the conclusions rather than by effort:
+
+- **Validate on a standard benchmark** (Nordland / Pitts30k / MSLS) with metric
+  ground truth. Every number here comes from 30 held-out queries on one campus
+  route, where a single query is worth 3.3 points.
+- **Combine the confidence signals instead of substituting them.** The geometric
+  gate currently replaces the sequence similarity with the inlier count, which
+  is why it lowers Recall@100%Precision; requiring both to pass should not.
+- **Multi-velocity sequence search with a proper velocity prior.** The search
+  exists but widening it blindly costs accuracy, because it also gives wrong
+  matches more chances to score high.
+- **Open-set with real distractors**, not just a removed frame range — a real
+  database contains mostly places the robot has never seen.
+- Semi-hard negative mining, PCA-whitening, and FAISS/HNSW indexing: standard
+  and cheap, but none of them are what currently limits this system.
 
 ## Notes
 
