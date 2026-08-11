@@ -8,3 +8,5 @@ outputs/*.pt
 outputs/**/*.pt
 *.pt
 *.pth
+# 面试学习笔记：仅保留在本地
+docs/interview/

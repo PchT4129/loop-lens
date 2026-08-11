@@ -68,7 +68,6 @@ vpr-loop-closure/
     run_ablation_v3.sh           # v3 ablation (classic vs modern)
   docs/
     experiments.md               # full ablation with negative results
-    interview/                   # study notes written alongside the code
   src/
     backbones.py                 # ResNet18 / DINOv2 factory, one contract
     dataset.py
