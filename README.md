@@ -14,9 +14,26 @@ two implementations — hand-crafted or CNN on one side, self-supervised
 transformer or learned matcher on the other — and every swap is motivated by a
 measurement from the previous stage rather than by "this one is newer".
 
+## At a Glance
+
+On the held-out 30-frame night segment, zero-shot DINOv2 raises Recall@1 from
+the fine-tuned ResNet18's **63.3% to 93.3%**; causal sequence matching reaches
+**100%**. In a controlled geometry study, DISK + LightGlue raises the
+correct/incorrect day-night inlier separation from ORB's **1.1x to 6.8x**.
+
+Wired into a real SLAM trajectory — ORB-SLAM3 stereo on KITTI odometry 00, its
+own loop closing disabled — the front end plus a hand-written pose-graph
+optimiser cuts absolute trajectory error from **4.335 m to 1.956 m** over
+3.7 km, with **97%** of accepted loop edges landing within 5 m of ground truth.
+
+Those are small-sample results, not benchmark claims: one query moves the main
+table by 3.3 points. The repository therefore reports bootstrap intervals and
+separates **validation-time gate fitting** from **frozen-threshold test
+evaluation**. Historical oracle sweeps remain labelled as such for provenance.
+
 ## Overview
 
-The system is a four-stage loop-closure front end. Each stage has a classic and a
+The system is a five-stage loop-closure pipeline. Each stage has a classic and a
 modern implementation, selectable from the CLI, so the two can be compared directly:
 
 ```text
@@ -39,15 +56,30 @@ modern implementation, selectable from the CLI, so the two can be compared direc
                  └───────────────────────┬──────────────────────────────┘
                                          │ inlier count
                  ┌───────────────────────▼──────────────────────────────┐
-                 │ ④ Accept / reject by threshold                       │
-                 │    measurable only under the open-set protocol        │
+                 │ ④ Accept / reject by a validation-fitted gate         │
+                 │    similarity + inlier ratio, frozen before test      │
+                 └───────────────────────┬──────────────────────────────┘
+                                         │ accepted loops + relative pose
+                 ┌───────────────────────▼──────────────────────────────┐
+                 │ ⑤ Pose-graph optimisation                            │
+                 │    stereo/RGB-D depth -> PnP -> SE(3) loop edge;      │
+                 │    Gauss-Newton on SE(3) written from scratch         │
+                 │    (src/se3.py, src/pose_graph.py) — no g2o/GTSAM     │
                  └──────────────────────────────────────────────────────┘
 ```
 
 Stage ① alone is the original baseline; stages ②–④ and the validation-driven
 training loop were added in v2; the modern variants and the open-set protocol
-in v3. See [`docs/experiments.md`](docs/experiments.md) for the full ablation,
+in v3; stage ⑤ and the KITTI integration in v5. See [`docs/experiments.md`](docs/experiments.md) for the full ablation,
 including the negative results.
+
+For a code-level walkthrough of the leakage-safe evaluation protocol, frozen
+gates, structured proposals and the new results, see
+[`docs/v4_evaluation_and_gating.md`](docs/v4_evaluation_and_gating.md).
+
+For the derivation, assumptions, complexity, failure modes and interview Q&A of
+the temporal constraint, see
+[`docs/sequence_matching.md`](docs/sequence_matching.md).
 
 Training supports both triplet loss and InfoNCE, with diagnostics that report
 how much of each batch still produces gradient — which turned out to matter
@@ -68,20 +100,34 @@ vpr-loop-closure/
     run_ablation_v3.sh           # v3 ablation (classic vs modern)
   docs/
     experiments.md               # full ablation with negative results
+    sequence_matching.md         # temporal constraint derivation and Q&A
+    v4_evaluation_and_gating.md  # frozen-gate protocol walkthrough
+  slam/
+    configs/                     # ORB-SLAM3 yaml, loop closing on and off
+    runs/                        # trajectories and logs
   src/
     backbones.py                 # ResNet18 / DINOv2 factory, one contract
     dataset.py
     evaluate.py                  # metrics, sequence re-rank, gate, open-set
+    confidence.py                # joint/logistic gate fitting and inference
+    ground_truth.py              # metric-distance benchmark manifests
     extract_features.py
     geometric_verification.py    # ORB + RANSAC
     learned_matching.py          # DISK + LightGlue + RANSAC
     losses.py                    # InfoNCE + gradient diagnostics
     models.py                    # ResNet18 + GAP/GeM pooling
     retrieve.py
+    rgbd_pose.py                 # PnP + RANSAC relative pose from depth
+    pose_graph.py                # Gauss-Newton pose graph on SE(3)
+    se3.py                       # Lie group utilities, self-tested
+    slam_loop_closure.py         # end-to-end SLAM loop closure pipeline
     sequence_match.py            # simplified SeqSLAM, multi-velocity
+    stereo_depth.py              # SGBM disparity -> depth, for KITTI
     train_triplet.py
     triplet_dataset.py
     visualize.py
+    visualize_proposal.py        # render gate evidence and decisions
+  tests/                         # confidence, metrics and causality tests
   README.md
 ```
 
@@ -133,6 +179,16 @@ pip install -r requirements.txt
 DISK + LightGlue path. DINOv2 weights (~85 MB for ViT-S/14) are pulled from
 `torch.hub` on first use.
 
+After downloading the three Gardens Point traversals, normalize them into the
+expected layout with:
+
+```bash
+python scripts/prepare_gardens_point.py \
+  --day-left /path/to/day_left \
+  --day-right /path/to/day_right \
+  --night-right /path/to/night_right
+```
+
 Verify CUDA:
 
 ```bash
@@ -144,6 +200,12 @@ print(torch.version.cuda)
 print(torch.cuda.is_available())
 print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU only")
 PY
+```
+
+Run the CPU-safe smoke suite:
+
+```bash
+bash scripts/run_smoke.sh
 ```
 
 ## Usage
@@ -235,11 +297,46 @@ python -m src.evaluate ... --seq-window 15 --seq-causal --seq-velocities 0.9,1.0
 # day-night where orb is at chance level
 python -m src.evaluate ... --geometric-verify --verifier lightglue --geometric-mode gate
 
-# Open-set: drop a database frame range so some queries have no valid match and
-# *should* be rejected. Without this, rejecting is always wrong and the gate
-# cannot be measured at all
-python -m src.evaluate ... --db-exclude-range 30 49
+# Open-set validation: fit a similarity gate and save it
+python -m src.evaluate ... --split-name night_right \
+  --min-index 0 --max-index 49 --db-exclude-range 30 39 \
+  --gate-mode similarity --fit-thresholds \
+  --thresholds-out outputs/gates/similarity.json
+
+# Disjoint test segment: apply the frozen gate, emit CIs and proposals
+python -m src.evaluate ... --split-name night_right \
+  --min-index 50 --max-index 99 --db-exclude-range 70 79 \
+  --thresholds-in outputs/gates/similarity.json \
+  --bootstrap-samples 1000 --proposals-out outputs/proposals.json
+
+# Joint sequence + geometry gate. Use the same pipeline flags in fit and test.
+python -m src.evaluate ... --seq-window 15 --seq-causal \
+  --geometric-verify --verifier lightglue --gate-mode joint \
+  --split-name night_right --min-index 0 --max-index 49 \
+  --db-exclude-range 30 39 \
+  --fit-thresholds --thresholds-out outputs/gates/joint.json
 ```
+
+`oracle/*` metrics scan thresholds on the reported split and describe score
+separation only. `deployed/*` metrics use a gate frozen on a different split;
+these are the numbers to cite as an operational accept/reject result.
+
+For MSLS, RobotCar or another metric-ground-truth benchmark, provide a CSV with
+`query_path,database_path,distance_m` rows. Paths must match the strings stored
+in the feature artifacts; queries with no pair inside the distance threshold
+are treated as open-set negatives:
+
+```bash
+python -m src.evaluate ... \
+  --ground-truth-manifest data/benchmark/validation_pairs.csv \
+  --distance-threshold-m 25 \
+  --gate-mode similarity --fit-thresholds \
+  --thresholds-out outputs/gates/benchmark.json
+```
+
+The adapter removes the Gardens Point frame-index assumption, but this
+repository does not claim external-benchmark numbers until the corresponding
+data and feature artifacts have actually been evaluated.
 
 To evaluate a held-out segment, use `--split-name`, `--min-index`, and
 `--max-index`:
@@ -319,7 +416,71 @@ out to matter more than the choice of loss — triplet reaches 98% zero-gradient
 triplets by epoch 6, and InfoNCE saturates too when the batch is small enough
 that the in-batch task becomes trivial. See `docs/experiments.md`.
 
+### 7. Close Loops on a SLAM Trajectory
+
+Run ORB-SLAM3 with loop closing disabled to get an odometry trajectory, then let
+this pipeline detect the loops and optimise the pose graph:
+
+```bash
+# Odometry only. slam/configs/*_loop_off.yaml appends `loopClosing: 0`.
+# Note this disables the loop-closing thread but not map-point reuse, which on
+# short indoor sequences already absorbs most of the drift — see experiments §6.1
+cd slam/runs/kitti_off && stereo_kitti ORBvoc.txt ../../configs/kitti_loop_off.yaml \
+  ~/datasets/KITTI/odometry/sequences/00
+
+# Detect loops, recover metric relative poses, optimise
+python -m src.slam_loop_closure \
+  --dataset kitti \
+  --trajectory slam/runs/kitti_off/CameraTrajectory.txt \
+  --sequence ~/datasets/KITTI/odometry/sequences/00 \
+  --output slam/runs/vpr_kitti.txt \
+  --min-gap 100 --top-k 1 --min-inliers 60 --max-reproj 1.5 \
+  --rot-info 1e4 --loop-info 10
+
+evo_ape kitti ~/datasets/KITTI/dataset/poses/00.txt slam/runs/vpr_kitti.txt -a
+```
+
+- `--min-gap` is the causal constraint: only keyframes this many frames older are
+  eligible, so temporally adjacent frames cannot masquerade as loops
+- `--rot-info` weights the rotation block of the information matrix. It is not
+  cosmetic: with an identity matrix, one metre of translation error costs the
+  same as one radian (57 degrees) of rotation error, and even 2000 ground-truth
+  loop edges only reach 4.335 -> 3.17 m. At `1e4` the same graph reaches 1.97 m
+- `--dataset tum` works the same way with `--associations`, taking depth from the
+  RGB-D channel instead of stereo SGBM
+
 ## Results
+
+### SLAM integration: KITTI odometry 00
+
+The front end is wired to a real trajectory. ORB-SLAM3 stereo runs with its own
+loop closing disabled to produce odometry; the pipeline then detects loops with
+DINOv2, verifies them with DISK + LightGlue, recovers a metric SE(3) relative
+pose by PnP on stereo depth, and optimises a pose graph written from scratch.
+
+![KITTI 00 trajectories](outputs/visualizations/kitti00_loop_closure.png)
+
+| Configuration | ATE RMSE | Max |
+| --- | ---: | ---: |
+| Odometry, loop closing disabled | 4.335 m | 8.54 m |
+| **Ours: DINOv2 + LightGlue + pose graph** | **1.956 m** | 3.82 m |
+| DBoW2, ORB-SLAM3 built-in loop closing | 1.204 m | 3.28 m |
+
+Loop edges are accurate: of the 763 accepted, **97% lie within 5 m** of ground
+truth (median 0.89 m, median 1213 PnP inliers, median reprojection error
+0.84 px). This holds even though retrieval alone is weak on this sequence —
+AUROC 0.896 and only 17% top-1 hit rate — which is the project's recurring
+finding that recall is cheap and precision must come from the second stage.
+
+Substituting ground truth for either the detected loop pairs or the estimated
+relative poses does **not** improve the result (1.956 m measured, 2.029 m with
+ground-truth relative poses, 2.036 m with ground-truth pairs). The remaining
+error therefore comes from the pose-graph formulation, not the front end: unlike
+ORB-SLAM3, this back end has no map points and runs no bundle adjustment. See
+[`docs/experiments.md`](docs/experiments.md) §6 for the full decomposition, the
+information-matrix ablation and the caveats.
+
+### Retrieval
 
 Using 100 database images from `day_left` and 200 query images from `day_right`
 and `night_right`, the pretrained ResNet18 baseline obtains:
@@ -362,7 +523,7 @@ case.
 
 Rows ⑤ and ⑥ are worth a second look: identical Recall@1, but
 Recall@100%Precision differs by 5.4x. Patch aggregation is not just as
-accurate as the CLS token, its similarity scores are far better calibrated —
+accurate as the CLS token, its similarity scores provide far better confidence separation —
 which matters more than average accuracy when a single false loop closure can
 tear the map apart.
 
@@ -384,12 +545,18 @@ Chance level is 50%, so ORB at 56% is effectively random. The failure was in
 the descriptor. Still, 72% remains well short of the 100% seen in-domain, and
 LightGlue's night distribution is heavily skewed (mean 62.5, median 18).
 
-### Open-set evaluation
+### Historical open-set oracle evaluation
 
 Removing database frames 30–49 leaves 14 of 100 night queries with no valid
 match, so they *should* be rejected. This is what finally makes the gate and
 Recall@100%Precision measurable — under the closed-set protocol used earlier,
 rejecting was always wrong.
+
+The following v3 table swept thresholds on the same 100-query split. It is kept
+to document how the next failure was discovered, but it is an **oracle
+separation result**, not a deployable threshold result. The current
+`run_ablation_v3.sh openset` instead fits on frames 000–049 and applies the
+frozen gate to frames 050–099.
 
 | Configuration | best F1 | R@100%P |
 | --- | ---: | ---: |
@@ -400,9 +567,42 @@ rejecting was always wrong.
 
 Sequence matching nearly triples Recall@100%Precision, so it improves not just
 ranking but the reliability of the confidence score. Adding a geometric gate
-then *hurts*, because the current implementation replaces the similarity
-confidence with the inlier count instead of requiring both to pass. Combining
-the two signals is the obvious next step.
+then *hurt* because the old implementation replaced similarity confidence with
+the inlier count.
+
+The replacement has now been implemented and evaluated with disjoint gate
+fitting: validation uses queries 000–049 with database frames 30–39 removed;
+test uses queries 050–099 with frames 70–79 removed. Thresholds are selected
+only on validation and frozen before test.
+
+| Frozen gate | Score threshold | Inlier-ratio threshold | Test precision | Test recall | Test F1 | FP |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| DINOv2 single frame | 0.684 | — | 0.848 | 0.848 | **0.848** | 7 |
+| Sequence only | 0.792 | — | 0.958 | 0.500 | 0.657 | 1 |
+| Sequence + ORB | 0.792 | 0.042 | 0.958 | 0.500 | 0.657 | 1 |
+| Sequence + LightGlue | 0.792 | 0.000 | 0.958 | 0.500 | 0.657 | 1 |
+
+With 5,000 query bootstraps, the 95% F1 intervals are `[0.747, 0.926]` for the
+single-frame gate and `[0.516, 0.775]` for the sequence gate. The intervals are
+wide, reinforcing that this remains a diagnostic result on a small route.
+
+The honest result is more nuanced than the oracle table. Sequence matching
+improves test Recall@1 from 0.82 to 0.92 and open-set AUPRC from 0.791 to 0.947,
+but its validation-fitted threshold transfers poorly to the later route segment:
+precision rises while recall and deployed F1 fall. Geometry does **not** repair
+that transfer—validation makes the ORB condition permissive and ignores
+LightGlue entirely. The frozen test also produces one false positive, showing
+why the oracle 100%-precision number was optimistic.
+
+This synthetic open-set protocol also removes a contiguous database range,
+compressing the sequence matrix so that array adjacency no longer always means
+temporal adjacency. The drop therefore cannot yet be attributed purely to route
+distribution shift; see [`docs/sequence_matching.md`](docs/sequence_matching.md)
+for the confound and the timestamp-aware fix.
+
+In gate mode only Top-1 now receives geometric verification; on the current CPU
+environment this costs about 23 ms per query for ORB and 1.0 s for LightGlue.
+Runtime depends strongly on hardware.
 
 **Caveats worth reading before citing any of this** — see
 [`docs/experiments.md`](docs/experiments.md):
@@ -457,6 +657,21 @@ illumination changes and visually similar corridor-like structures.
 
 ![Night failure](outputs/visualizations/night_failure_103.png)
 
+### Frozen-gate decision evidence
+
+The evaluator can emit a `LoopClosureProposal` JSON for every query. This view
+shows a correct geometric candidate rejected by the validation-fitted sequence
+threshold—a concrete example of threshold transfer, rather than just another
+Top-K retrieval montage.
+
+![Frozen gate false negative](outputs/visualizations/frozen_gate_false_negative_080.png)
+
+```bash
+python -m src.visualize_proposal \
+  --proposals outputs/proposals.json --index 30 \
+  --output outputs/visualizations/frozen_gate_false_negative_080.png
+```
+
 ## Discussion
 
 In a SLAM system this module sits at the front of a funnel that tightens stage
@@ -486,7 +701,7 @@ Five findings shaped how this project ended up:
    fine-tuning had gained 13.
 
 3. **Sequence matching is the single largest lever on this dataset**, and it
-   improves confidence calibration as much as ranking: Recall@100%Precision goes
+   improves confidence separation as much as ranking: Recall@100%Precision goes
    from 0.233 to 0.686. But the gain rests on the trajectory being continuous and
    traversed at a stable speed, which Gardens Point satisfies unusually well.
 
@@ -508,9 +723,10 @@ Ordered by how much they would change the conclusions rather than by effort:
 - **Validate on a standard benchmark** (Nordland / Pitts30k / MSLS) with metric
   ground truth. Every number here comes from 30 held-out queries on one campus
   route, where a single query is worth 3.3 points.
-- **Combine the confidence signals instead of substituting them.** The geometric
-  gate currently replaces the sequence similarity with the inlier count, which
-  is why it lowers Recall@100%Precision; requiring both to pass should not.
+- **Evaluate the new joint gate on a larger benchmark.** The implementation now
+  fits similarity and inlier-ratio thresholds on validation and freezes them for
+  test, but Gardens Point is too small to establish how well those thresholds
+  transfer.
 - **Multi-velocity sequence search with a proper velocity prior.** The search
   exists but widening it blindly costs accuracy, because it also gives wrong
   matches more chances to score high.

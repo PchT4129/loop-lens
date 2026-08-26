@@ -6,7 +6,13 @@ __pycache__/
 data/
 outputs/*.pt
 outputs/**/*.pt
+outputs/**/*.json
 *.pt
 *.pth
 # 面试学习笔记：仅保留在本地
 docs/interview/
+
+# SLAM 运行产物：特征缓存与日志（轨迹保留，便于复现对比）
+slam/runs/*.pt
+slam/runs/*.log
+slam/runs/*.records.npy

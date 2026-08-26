@@ -52,7 +52,7 @@ def _get_models():
     return _MODELS["disk"], _MODELS["matcher"]
 
 
-@lru_cache(maxsize=512)
+@lru_cache(maxsize=900)
 def _detect(image_path: str, n_features: int):
     """提取 DISK 关键点与描述子。带缓存——同一张 database 图会被反复用到。
 
@@ -65,7 +65,7 @@ def _detect(image_path: str, n_features: int):
         raise ValueError(f"Could not read image: {image_path}")
 
     dev = _device()
-    tensor = K.image_to_tensor(image, False).float() / 255.0
+    tensor = K.image.image_to_tensor(image, False).float() / 255.0
     tensor = K.color.bgr_to_rgb(tensor).to(dev)
 
     disk, _ = _get_models()
@@ -102,6 +102,7 @@ def verify_pair(
         "num_matches": 0,
         "num_inliers": 0,
         "inlier_ratio": 0.0,
+        "fundamental_matrix": None,
     }
 
     q_pts, q_desc = _detect(str(query_path), n_features)
@@ -137,7 +138,7 @@ def verify_pair(
     dst = d_pts[idxs[:, 1]]
 
     # ⚠️ 这一步必须和 ORB 路径完全一致，否则对比不公平
-    _, mask = cv2.findFundamentalMat(
+    fundamental_matrix, mask = cv2.findFundamentalMat(
         src, dst, cv2.FM_RANSAC, ransac_threshold, 0.99
     )
     if mask is None:
@@ -150,12 +151,50 @@ def verify_pair(
         "num_matches": num_matches,
         "num_inliers": num_inliers,
         "inlier_ratio": num_inliers / max(num_matches, 1),
+        "fundamental_matrix": fundamental_matrix.tolist(),
     }
 
 
-def verify_candidates(query_path, candidate_paths: list[str], **kwargs) -> list[int]:
-    """对一个 query 的全部候选做几何验证，返回每个候选的内点数。"""
+def verify_candidates(query_path, candidate_paths: list[str], **kwargs) -> list[dict]:
+    """对一个 query 的全部候选做几何验证，返回完整验证统计。"""
     return [
-        verify_pair(query_path, candidate, **kwargs)["num_inliers"]
+        verify_pair(query_path, candidate, **kwargs)
         for candidate in candidate_paths
     ]
+
+
+def match_pair(
+    query_path: str | Path,
+    database_path: str | Path,
+    n_features: int = DEFAULT_N_FEATURES,
+) -> tuple[np.ndarray, np.ndarray]:
+    """返回一一对应的匹配像素坐标 (uv_query [N,2], uv_database [N,2])。
+
+    `verify_pair` 只回报内点数；位姿图需要的是【对应关系本身】，
+    好把它们喂给 PnP 求相对位姿（见 `rgbd_pose.py`）。
+    两者共用同一套 DISK + LightGlue 与同一个特征缓存。
+    """
+    import kornia.feature as KF
+
+    q_pts, q_desc = _detect(str(query_path), n_features)
+    d_pts, d_desc = _detect(str(database_path), n_features)
+
+    empty = (np.empty((0, 2), np.float32), np.empty((0, 2), np.float32))
+    if q_desc is None or d_desc is None:
+        return empty
+
+    dev = _device()
+    _, matcher = _get_models()
+    q_t = torch.from_numpy(q_pts).to(dev)
+    d_t = torch.from_numpy(d_pts).to(dev)
+    lafs_q = KF.laf_from_center_scale_ori(q_t[None], torch.ones(1, len(q_t), 1, 1, device=dev))
+    lafs_d = KF.laf_from_center_scale_ori(d_t[None], torch.ones(1, len(d_t), 1, 1, device=dev))
+
+    with torch.no_grad():
+        _, idxs = matcher(q_desc, d_desc, lafs_q, lafs_d)
+
+    if len(idxs) == 0:
+        return empty
+
+    idxs = idxs.cpu().numpy()
+    return q_pts[idxs[:, 0]], d_pts[idxs[:, 1]]
