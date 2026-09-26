@@ -9,8 +9,14 @@ outputs/**/*.pt
 outputs/**/*.json
 *.pt
 *.pth
-# 面试学习笔记：仅保留在本地
+# 学习与面试笔记：仅保留在本地，不进公开仓库
 docs/interview/
+docs/learning-notes/
+INTERVIEW_PREP_VPR_CN.md
+PROJECT_REVIEW_NOTES_VPR_CN.md
+VPR_INTERVIEW_DEEP_DIVE_CN.md
+VPR_LOOP_CLOSURE_INTERVIEW_VIVA_GUIDE_CN.md
+VPR_LOOP_CLOSURE_PROJECT_GUIDE_CN.md
 
 # SLAM 运行产物：特征缓存与日志（轨迹保留，便于复现对比）
 slam/runs/*.pt
