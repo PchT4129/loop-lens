@@ -4,8 +4,14 @@ from pathlib import Path
 import torch
 
 
-def load_feature_file(path: str | Path):
+def load_feature_file(path: str | Path, include_meta: bool = False):
     data = torch.load(path, map_location="cpu")
+    if "features" not in data or "paths" not in data:
+        raise ValueError(f"invalid feature artifact: {path}")
+    if data["features"].ndim != 2 or len(data["features"]) != len(data["paths"]):
+        raise ValueError(f"feature/path shape mismatch in: {path}")
+    if include_meta:
+        return data["features"], data["paths"], data.get("meta", {})
     return data["features"], data["paths"]
 
 def retrieve_top_k(

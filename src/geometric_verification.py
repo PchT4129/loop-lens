@@ -100,6 +100,7 @@ def verify_pair(
         "num_matches": 0,
         "num_inliers": 0,
         "inlier_ratio": 0.0,
+        "fundamental_matrix": None,
     }
 
     query_points, query_desc = _detect(str(query_path), n_features)
@@ -136,7 +137,7 @@ def verify_pair(
 
     # 用基础矩阵而非本质矩阵：本质矩阵需要相机内参，而这个数据集没有标定信息。
     # 基础矩阵同样能施加对极约束，足以判断"是不是同一个场景"。
-    _, mask = cv2.findFundamentalMat(
+    fundamental_matrix, mask = cv2.findFundamentalMat(
         src, dst, cv2.FM_RANSAC, ransac_threshold, 0.99
     )
 
@@ -150,6 +151,7 @@ def verify_pair(
         "num_matches": len(good),
         "num_inliers": num_inliers,
         "inlier_ratio": num_inliers / max(len(good), 1),
+        "fundamental_matrix": fundamental_matrix.tolist(),
     }
 
 
@@ -157,10 +159,10 @@ def verify_candidates(
     query_path: str | Path,
     candidate_paths: list[str],
     **kwargs,
-) -> list[int]:
-    """对一个 query 的全部候选做几何验证，返回每个候选的内点数。"""
+) -> list[dict]:
+    """对一个 query 的全部候选做几何验证，返回完整验证统计。"""
     return [
-        verify_pair(query_path, candidate, **kwargs)["num_inliers"]
+        verify_pair(query_path, candidate, **kwargs)
         for candidate in candidate_paths
     ]
 

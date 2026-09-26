@@ -17,7 +17,8 @@ set -euo pipefail
 
 OUT=outputs/v3
 CKPT=outputs/checkpoints
-mkdir -p "$OUT" "$CKPT"
+GATES="$OUT/gates"
+mkdir -p "$OUT" "$CKPT" "$GATES"
 
 TRAIN_ARGS="--anchor-dir data/gardens_point/query/night_right \
   --database-dir data/gardens_point/database/day_left \
@@ -95,26 +96,41 @@ do_closed() {
 
 # ---------------------------------------------------------------- 开集表
 do_openset() {
-  banner "开集评测（移除 database 帧号 30-49，14/100 query 应被拒绝）"
+  banner "开集评测（validation 定阈值，test 只应用冻结阈值）"
+  echo "validation=query 000-049/exclude 30-39; test=query 050-099/exclude 70-79"
   for cfg in "① ResNet18 预训练:base" "② ResNet18+triplet:triplet" "③ DINOv2:dino_mean"; do
     name="${cfg%%:*}"; prefix="${cfg##*:}"
     echo "--- $name ---"
+    gate="$GATES/${prefix}_single.json"
     $EVAL --database "$OUT/${prefix}_database.pt" --query "$OUT/${prefix}_query.pt" \
-      --db-exclude-range 30 49 2>&1 \
-      | grep -E "recall@1:|open_set/(best_f1:|recall@100)"
+      --min-index 0 --max-index 49 --db-exclude-range 30 39 \
+      --gate-mode similarity --fit-thresholds --thresholds-out "$gate" >/dev/null
+    $EVAL --database "$OUT/${prefix}_database.pt" --query "$OUT/${prefix}_query.pt" \
+      --min-index 50 --max-index 99 --db-exclude-range 70 79 \
+      --thresholds-in "$gate" --bootstrap-samples 1000 2>&1 \
+      | grep -E "recall@1:|open_set/sequence_auprc:|deployed/open_set/(precision|recall|f1):"
   done
 
   echo
-  echo "--- DINOv2 上逐级叠加（含门控） ---"
-  for cfg in "单帧:" \
-             "+因果序列:--seq-window 15 --seq-causal" \
-             "+序列+ORB门控:--seq-window 15 --seq-causal --geometric-verify --verifier orb" \
-             "+序列+LightGlue门控:--seq-window 15 --seq-causal --geometric-verify --verifier lightglue"; do
+  echo "--- DINOv2 上逐级叠加（冻结 gate；几何路径使用 joint gate） ---"
+  local step=0
+  for cfg in "单帧:similarity:" \
+             "+因果序列:similarity:--seq-window 15 --seq-causal" \
+             "+序列+ORB联合门控:joint:--seq-window 15 --seq-causal --geometric-verify --verifier orb" \
+             "+序列+LightGlue联合门控:joint:--seq-window 15 --seq-causal --geometric-verify --verifier lightglue"; do
     name="${cfg%%:*}"; extra="${cfg#*:}"
+    gate_mode="${extra%%:*}"; extra="${extra#*:}"
+    step=$((step + 1))
+    gate="$GATES/dino_step${step}_${gate_mode}.json"
     echo "  [$name]"
     $EVAL --database "$OUT/dino_mean_database.pt" --query "$OUT/dino_mean_query.pt" \
-      --db-exclude-range 30 49 $extra 2>&1 \
-      | grep -E "recall@1:|open_set/(best_f1:|recall@100)" | sed 's/^/    /'
+      --min-index 0 --max-index 49 --db-exclude-range 30 39 $extra \
+      --gate-mode "$gate_mode" --fit-thresholds --thresholds-out "$gate" >/dev/null
+    $EVAL --database "$OUT/dino_mean_database.pt" --query "$OUT/dino_mean_query.pt" \
+      --min-index 50 --max-index 99 --db-exclude-range 70 79 $extra \
+      --thresholds-in "$gate" --bootstrap-samples 1000 2>&1 \
+      | grep -E "recall@1:|open_set/sequence_auprc:|deployed/open_set/(precision|recall|f1):" \
+      | sed 's/^/    /'
   done
 }
 

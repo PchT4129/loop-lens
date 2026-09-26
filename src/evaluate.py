@@ -1,11 +1,29 @@
 import argparse
+import json
 import re
+import time
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import torch
 
 from src.retrieve import load_feature_file
 from src.sequence_match import parse_velocities, sequence_rerank
+from src.confidence import apply_gate, fit_gate, gate_scores
+from src.ground_truth import PairManifestGroundTruth
+
+
+@dataclass
+class LoopClosureProposal:
+    query_path: str
+    candidate_path: str
+    retrieval_score: float
+    sequence_score: float
+    num_matches: int = 0
+    num_inliers: int = 0
+    inlier_ratio: float = 0.0
+    accepted: bool | None = None
+    fundamental_matrix: list[list[float]] | None = None
 
 
 def image_index_from_path(path: str) -> int:
@@ -16,7 +34,14 @@ def image_index_from_path(path: str) -> int:
     return int(match.group(1))
 
 
-def is_correct_match(query_path: str, database_path: str, tolerance: int) -> bool:
+def is_correct_match(
+    query_path: str,
+    database_path: str,
+    tolerance: int,
+    ground_truth: PairManifestGroundTruth | None = None,
+) -> bool:
+    if ground_truth is not None:
+        return ground_truth.is_correct(query_path, database_path)
     query_index = image_index_from_path(query_path)
     database_index = image_index_from_path(database_path)
 
@@ -30,6 +55,7 @@ def evaluate_retrieval(
     recall_ks: list[int],
     precision_k: int,
     tolerance: int,
+    ground_truth: PairManifestGroundTruth | None = None,
 ):
     metrics = {}
 
@@ -44,6 +70,7 @@ def evaluate_retrieval(
                     query_path=query_path,
                     database_path=database_paths[db_idx.item()],
                     tolerance=tolerance,
+                    ground_truth=ground_truth,
                 )
                 for db_idx in retrieved_indices
             )
@@ -63,6 +90,7 @@ def evaluate_retrieval(
                 query_path=query_path,
                 database_path=database_paths[db_idx.item()],
                 tolerance=tolerance,
+                ground_truth=ground_truth,
             )
             for db_idx in retrieved_indices
         )
@@ -86,11 +114,12 @@ def select_query_indices(
         if f"/{split_name}/" not in path:
             continue
 
-        image_index = image_index_from_path(path)
-        if min_index is not None and image_index < min_index:
-            continue
-        if max_index is not None and image_index > max_index:
-            continue
+        if min_index is not None or max_index is not None:
+            image_index = image_index_from_path(path)
+            if min_index is not None and image_index < min_index:
+                continue
+            if max_index is not None and image_index > max_index:
+                continue
 
         selected_indices.append(index)
 
@@ -103,6 +132,7 @@ def recall_at_full_precision(
     top_indices: torch.Tensor,
     confidences: torch.Tensor,
     tolerance: int,
+    ground_truth: PairManifestGroundTruth | None = None,
 ) -> tuple[float, float]:
     """Recall@100%Precision —— SLAM 回环检测的经典指标。
 
@@ -124,7 +154,9 @@ def recall_at_full_precision(
     records = []
     for query_idx, query_path in enumerate(query_paths):
         db_idx = top_indices[query_idx, 0].item()
-        correct = is_correct_match(query_path, database_paths[db_idx], tolerance)
+        correct = is_correct_match(
+            query_path, database_paths[db_idx], tolerance, ground_truth
+        )
         records.append((confidences[query_idx].item(), correct))
 
     # 按置信度降序：阈值从高往低放，接受的样本逐个增加
@@ -156,7 +188,9 @@ def open_set_metrics(
     top_indices: torch.Tensor,
     confidences: torch.Tensor,
     tolerance: int,
-    threshold: float,
+    threshold: float | None = None,
+    accepted: torch.Tensor | None = None,
+    ground_truth: PairManifestGroundTruth | None = None,
 ) -> dict[str, float]:
     """开集评测：有些 query 在 database 里【根本没有正确答案】，系统应该拒绝它们。
 
@@ -177,26 +211,36 @@ def open_set_metrics(
         系统接受     TP(且检索对)        FP ← 灾难性的假阳性回环
         系统拒绝     FN                  TN
     """
-    database_indices = [image_index_from_path(p) for p in database_paths]
+    database_indices = (
+        [image_index_from_path(p) for p in database_paths]
+        if ground_truth is None else []
+    )
 
     tp = fp = fn = tn = 0
     num_with_match = 0
 
     for query_idx, query_path in enumerate(query_paths):
-        query_index = image_index_from_path(query_path)
-
         # 这个 query 在【过滤后的】database 里还有没有正确答案？
-        has_match = any(abs(d - query_index) <= tolerance for d in database_indices)
+        if ground_truth is None:
+            query_index = image_index_from_path(query_path)
+            has_match = any(abs(d - query_index) <= tolerance for d in database_indices)
+        else:
+            has_match = ground_truth.has_match(query_path, database_paths)
         num_with_match += int(has_match)
 
-        accepted = confidences[query_idx].item() >= threshold
+        is_accepted = (
+            bool(accepted[query_idx])
+            if accepted is not None
+            else confidences[query_idx].item() >= float(threshold)
+        )
         top1_correct = is_correct_match(
-            query_path, database_paths[top_indices[query_idx, 0].item()], tolerance
+            query_path, database_paths[top_indices[query_idx, 0].item()], tolerance,
+            ground_truth,
         )
 
-        if accepted and top1_correct:
+        if is_accepted and top1_correct:
             tp += 1
-        elif accepted:
+        elif is_accepted:
             fp += 1               # 断言了一个回环，但它是错的
         elif has_match:
             fn += 1               # 本该找到却拒绝了
@@ -220,12 +264,115 @@ def open_set_metrics(
     }
 
 
+def open_set_targets(
+    query_paths: list[str],
+    database_paths: list[str],
+    top_indices: torch.Tensor,
+    tolerance: int,
+    ground_truth: PairManifestGroundTruth | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Return (top1_correct, has_any_valid_match) for gate fitting."""
+    database_indices = (
+        [image_index_from_path(path) for path in database_paths]
+        if ground_truth is None else []
+    )
+    top1_correct = []
+    has_match = []
+    for query_idx, query_path in enumerate(query_paths):
+        if ground_truth is None:
+            query_index = image_index_from_path(query_path)
+            has_match.append(
+                any(abs(index - query_index) <= tolerance for index in database_indices)
+            )
+        else:
+            has_match.append(ground_truth.has_match(query_path, database_paths))
+        candidate = database_paths[top_indices[query_idx, 0].item()]
+        top1_correct.append(
+            is_correct_match(query_path, candidate, tolerance, ground_truth)
+        )
+    return torch.tensor(top1_correct), torch.tensor(has_match)
+
+
+def open_set_average_precision(
+    confidences: torch.Tensor,
+    top1_correct: torch.Tensor,
+    has_match: torch.Tensor,
+) -> float:
+    """Area under the open-set precision-recall curve without fitting a threshold."""
+    order = torch.argsort(confidences, descending=True)
+    correct = top1_correct[order].float()
+    cumulative_tp = correct.cumsum(dim=0)
+    precision = cumulative_tp / torch.arange(1, len(order) + 1)
+    return float((precision * correct).sum() / max(int(has_match.sum()), 1))
+
+
+def bootstrap_retrieval_cis(
+    query_paths: list[str],
+    database_paths: list[str],
+    top_indices: torch.Tensor,
+    recall_ks: list[int],
+    tolerance: int,
+    samples: int,
+    seed: int = 0,
+    ground_truth: PairManifestGroundTruth | None = None,
+) -> dict[str, float]:
+    """Non-parametric 95% CIs over queries for Recall@K."""
+    if samples <= 0:
+        return {}
+    generator = torch.Generator().manual_seed(seed)
+    num_queries = len(query_paths)
+    metrics: dict[str, float] = {}
+    for k in recall_ks:
+        hits = torch.tensor([
+            any(
+                is_correct_match(
+                    query_path, database_paths[index.item()], tolerance, ground_truth
+                )
+                for index in top_indices[query_idx, :k]
+            )
+            for query_idx, query_path in enumerate(query_paths)
+        ], dtype=torch.float32)
+        draws = torch.randint(num_queries, (samples, num_queries), generator=generator)
+        estimates = hits[draws].mean(dim=1)
+        metrics[f"recall@{k}/ci95_low"] = float(torch.quantile(estimates, 0.025))
+        metrics[f"recall@{k}/ci95_high"] = float(torch.quantile(estimates, 0.975))
+    return metrics
+
+
+def bootstrap_open_set_cis(
+    accepted: torch.Tensor,
+    top1_correct: torch.Tensor,
+    has_match: torch.Tensor,
+    samples: int,
+    seed: int = 0,
+) -> dict[str, float]:
+    if samples <= 0:
+        return {}
+    generator = torch.Generator().manual_seed(seed)
+    num_queries = len(accepted)
+    draws = torch.randint(num_queries, (samples, num_queries), generator=generator)
+    sampled_accepted = accepted.bool()[draws]
+    sampled_correct = top1_correct.bool()[draws]
+    sampled_has_match = has_match.bool()[draws]
+    tp = (sampled_accepted & sampled_correct).sum(dim=1).float()
+    fp = (sampled_accepted & ~sampled_correct).sum(dim=1).float()
+    precision = tp / (tp + fp).clamp(min=1)
+    recall = tp / sampled_has_match.sum(dim=1).clamp(min=1)
+    f1 = 2 * precision * recall / (precision + recall).clamp(min=1e-12)
+    intervals = {}
+    for name, values in {"precision": precision, "recall": recall, "f1": f1}.items():
+        intervals[f"deployed/open_set/{name}/ci95_low"] = float(torch.quantile(values, 0.025))
+        intervals[f"deployed/open_set/{name}/ci95_high"] = float(torch.quantile(values, 0.975))
+    return intervals
+
+
 def sweep_open_set(
     query_paths: list[str],
     database_paths: list[str],
     top_indices: torch.Tensor,
     confidences: torch.Tensor,
     tolerance: int,
+    ground_truth: PairManifestGroundTruth | None = None,
 ) -> dict[str, float]:
     """扫描置信度阈值，找最佳 F1 和零假阳性下的最大召回。"""
     thresholds = sorted({c.item() for c in confidences} | {0.0})
@@ -236,7 +383,8 @@ def sweep_open_set(
 
     for threshold in thresholds:
         m = open_set_metrics(
-            query_paths, database_paths, top_indices, confidences, tolerance, threshold
+            query_paths, database_paths, top_indices, confidences, tolerance, threshold,
+            ground_truth=ground_truth,
         )
         if m["open_set/f1"] > best_f1["open_set/best_f1"]:
             best_f1 = {
@@ -259,7 +407,6 @@ def apply_geometric_verification(
     database_paths: list[str],
     top_indices: torch.Tensor,
     top_scores: torch.Tensor,
-    inlier_threshold: int,
     mode: str = "gate",
     verifier: str = "orb",
 ):
@@ -268,8 +415,8 @@ def apply_geometric_verification(
     两种模式，实测表明它们的适用性差别很大：
 
     mode="gate"（默认，也是 ORB-SLAM 里的用法）
-        不改变排序，只把 top-1 的内点数作为【接受/拒绝】的置信度。
-        低于阈值视为"这不是回环"，置信度归零。
+        不改变排序，并返回 top-1 的完整几何统计。接受/拒绝由后续的
+        validation-fitted gate 统一完成。
 
     mode="rerank"
         按内点数重排 Top-K。⚠️ 实测这会【降低】性能：
@@ -296,11 +443,17 @@ def apply_geometric_verification(
     num_queries, k = top_indices.shape
     new_indices = top_indices.clone()
     new_scores = top_scores.clone()
-    top1_inliers = torch.zeros(num_queries)
+    top1_stats: list[dict] = []
 
     for query_idx, query_path in enumerate(query_paths):
-        candidates = [database_paths[i.item()] for i in top_indices[query_idx]]
-        inliers = verify_candidates(query_path, candidates)
+        candidate_indices = (
+            top_indices[query_idx]
+            if mode == "rerank"
+            else top_indices[query_idx, :1]
+        )
+        candidates = [database_paths[i.item()] for i in candidate_indices]
+        stats = verify_candidates(query_path, candidates)
+        inliers = [item["num_inliers"] for item in stats]
 
         if mode == "rerank":
             # 稳定排序：内点数相同时保持原有的 CNN 相似度顺序
@@ -308,14 +461,60 @@ def apply_geometric_verification(
             for rank, src in enumerate(order):
                 new_indices[query_idx, rank] = top_indices[query_idx, src]
                 new_scores[query_idx, rank] = top_scores[query_idx, src]
-            best = inliers[order[0]]
+            best_stats = stats[order[0]]
         else:
-            best = inliers[0]
+            best_stats = stats[0]
+        top1_stats.append(best_stats)
 
-        # 低于阈值视为"不是回环"，置信度归零（门控语义）
-        top1_inliers[query_idx] = best if best >= inlier_threshold else 0.0
+    return new_indices, new_scores, top1_stats
 
-    return new_indices, new_scores, top1_inliers
+
+def build_signals(
+    retrieval_scores: torch.Tensor,
+    sequence_scores: torch.Tensor,
+    geometric_stats: list[dict] | None,
+) -> dict[str, torch.Tensor]:
+    num_queries = len(sequence_scores)
+    if geometric_stats is None:
+        ratios = torch.zeros(num_queries)
+        matches = torch.zeros(num_queries)
+    else:
+        ratios = torch.tensor([item["inlier_ratio"] for item in geometric_stats])
+        matches = torch.tensor([item["num_matches"] for item in geometric_stats]).float()
+    return {
+        "retrieval_score": retrieval_scores.float(),
+        "sequence_score": sequence_scores.float(),
+        "inlier_ratio": ratios.float(),
+        "log_num_matches": torch.log1p(matches),
+    }
+
+
+def write_proposals(
+    output_path: str | Path,
+    query_paths: list[str],
+    database_paths: list[str],
+    top_indices: torch.Tensor,
+    signals: dict[str, torch.Tensor],
+    geometric_stats: list[dict] | None,
+    accepted: torch.Tensor | None,
+) -> None:
+    proposals = []
+    for query_idx, query_path in enumerate(query_paths):
+        stats = geometric_stats[query_idx] if geometric_stats is not None else {}
+        proposals.append(asdict(LoopClosureProposal(
+            query_path=query_path,
+            candidate_path=database_paths[top_indices[query_idx, 0].item()],
+            retrieval_score=float(signals["retrieval_score"][query_idx]),
+            sequence_score=float(signals["sequence_score"][query_idx]),
+            num_matches=int(stats.get("num_matches", 0)),
+            num_inliers=int(stats.get("num_inliers", 0)),
+            inlier_ratio=float(stats.get("inlier_ratio", 0.0)),
+            accepted=None if accepted is None else bool(accepted[query_idx]),
+            fundamental_matrix=stats.get("fundamental_matrix"),
+        )))
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(proposals, indent=2), encoding="utf-8")
 
 
 def print_metrics(
@@ -326,11 +525,15 @@ def print_metrics(
     min_index: int | None = None,
     max_index: int | None = None,
     extra_lines: list[str] | None = None,
+    distance_threshold_m: float | None = None,
 ):
     print("=" * 80)
     print(f"Split: {split_name}")
     print(f"Num queries: {num_queries}")
-    print(f"Tolerance: ±{tolerance} frames")
+    if distance_threshold_m is None:
+        print(f"Tolerance: ±{tolerance} frames")
+    else:
+        print(f"Ground truth: distance <= {distance_threshold_m:g} m")
 
     if min_index is not None or max_index is not None:
         min_label = "*" if min_index is None else str(min_index)
@@ -350,6 +553,11 @@ def main():
     parser.add_argument("--query", type=str, required=True)
     parser.add_argument("--top-k", type=int, default=10)
     parser.add_argument("--tolerance", type=int, default=3)
+    parser.add_argument(
+        "--ground-truth-manifest", type=str, default=None,
+        help="CSV with query_path,database_path,distance_m for metric benchmarks",
+    )
+    parser.add_argument("--distance-threshold-m", type=float, default=25.0)
     parser.add_argument("--split-name", type=str, default=None)
     parser.add_argument("--min-index", type=int, default=None)
     parser.add_argument("--max-index", type=int, default=None)
@@ -387,11 +595,67 @@ def main():
     parser.add_argument(
         "--verifier", choices=["orb", "lightglue"], default="orb",
         help="orb=手工特征(快，但跨昼夜判别力等同随机)；"
-             "lightglue=DISK+LightGlue 学习型特征(慢约2倍，跨昼夜判别力恢复)",
+             "lightglue=DISK+LightGlue 学习型特征(建议 GPU，跨昼夜判别力恢复)",
     )
-    parser.add_argument("--inlier-threshold", type=int, default=20)
+    parser.add_argument(
+        "--gate-mode", choices=["similarity", "geometry", "joint", "logistic"],
+        default="joint",
+        help="接受/拒绝策略。joint 同时要求序列分数与几何内点率过阈值",
+    )
+    parser.add_argument(
+        "--fit-thresholds", action="store_true",
+        help="在当前 validation split 上拟合 gate；必须同时传 --thresholds-out",
+    )
+    parser.add_argument("--thresholds-in", type=str, default=None,
+                        help="读取 validation 上冻结的 gate JSON，用于 test")
+    parser.add_argument("--thresholds-out", type=str, default=None,
+                        help="保存拟合出的 gate JSON")
+    parser.add_argument("--proposals-out", type=str, default=None,
+                        help="将逐帧 LoopClosureProposal 写成 JSON")
+    parser.add_argument("--bootstrap-samples", type=int, default=0,
+                        help=">0 时对 Recall@K 做 query bootstrap 95%% CI")
+    parser.add_argument("--bootstrap-seed", type=int, default=0)
+    parser.add_argument("--inlier-threshold", type=int, default=20,
+                        help=argparse.SUPPRESS)
     args = parser.parse_args()
 
+    if args.fit_thresholds and not args.thresholds_out:
+        parser.error("--fit-thresholds requires --thresholds-out")
+    if args.fit_thresholds and args.thresholds_in:
+        parser.error("fit and apply are separate phases; do not combine threshold flags")
+    if args.fit_thresholds and args.split_name is None and args.ground_truth_manifest is None:
+        parser.error("threshold fitting requires one explicit --split-name")
+    if args.fit_thresholds and args.db_exclude_range is None and args.ground_truth_manifest is None:
+        parser.error(
+            "threshold fitting requires --db-exclude-range or an open-set ground-truth manifest"
+        )
+    if args.db_exclude_range is not None and args.ground_truth_manifest is not None:
+        parser.error("use either a metric manifest or frame-index exclusion, not both")
+    if args.ground_truth_manifest is not None and (
+        args.min_index is not None or args.max_index is not None
+    ):
+        parser.error("frame-index min/max filters are unavailable with metric manifests")
+
+    gate_config = None
+    if args.thresholds_in:
+        gate_config = json.loads(Path(args.thresholds_in).read_text(encoding="utf-8"))
+        args.gate_mode = gate_config["gate_mode"]
+    if args.gate_mode in {"geometry", "joint", "logistic"} and not args.geometric_verify:
+        if args.fit_thresholds or args.thresholds_in:
+            parser.error(f"--gate-mode {args.gate_mode} requires --geometric-verify")
+
+    pipeline_config = {
+        "seq_window": args.seq_window,
+        "seq_causal": args.seq_causal,
+        "seq_velocities": args.seq_velocities,
+        "geometric_verify": args.geometric_verify,
+        "geometric_mode": args.geometric_mode,
+        "verifier": args.verifier if args.geometric_verify else None,
+        "ground_truth_protocol": (
+            f"metric@{args.distance_threshold_m:g}m"
+            if args.ground_truth_manifest else f"frame_index@{args.tolerance}"
+        ),
+    }
     # --- 修 M5 的静默失效 ---
     # Python/PyTorch 的切片越界【不会报错】，会静默返回它有的那部分。
     # 所以 --top-k 小于 recall_ks 最大值时，算出来的 recall@10 其实是 recall@5，
@@ -403,8 +667,32 @@ def main():
             f"否则切片会被静默截断，指标是错的"
         )
 
-    database_features, database_paths = load_feature_file(args.database)
-    query_features, query_paths = load_feature_file(args.query)
+    database_features, database_paths, database_meta = load_feature_file(
+        args.database, include_meta=True
+    )
+    query_features, query_paths, query_meta = load_feature_file(
+        args.query, include_meta=True
+    )
+    if database_meta != query_meta:
+        raise ValueError(
+            "database and query feature artifacts were produced by different configs: "
+            f"{database_meta} != {query_meta}"
+        )
+    pipeline_config["feature_meta"] = query_meta or {
+        "feature_dim": int(query_features.shape[1]),
+        "legacy_artifact_without_meta": True,
+    }
+    if gate_config is not None and gate_config.get("pipeline") != pipeline_config:
+        parser.error(
+            "threshold file was fitted for a different pipeline or feature configuration: "
+            f"expected {gate_config.get('pipeline')}, got {pipeline_config}"
+        )
+    ground_truth = (
+        PairManifestGroundTruth.from_csv(
+            args.ground_truth_manifest, args.distance_threshold_m
+        )
+        if args.ground_truth_manifest else None
+    )
 
     if args.db_exclude_range is not None:
         lo, hi = args.db_exclude_range
@@ -418,17 +706,30 @@ def main():
         print(f"[开集] 从 database 移除帧号 {lo}-{hi} 共 {removed} 张，"
               f"剩余 {len(database_paths)} 张")
 
-    split_names = [args.split_name] if args.split_name is not None else [
-        "day_right",
-        "night_right",
-    ]
+    if len(database_paths) < required_k:
+        raise ValueError(
+            f"filtered database has {len(database_paths)} images, fewer than the "
+            f"{required_k} required by recall/precision metrics"
+        )
+
+    if ground_truth is not None and args.split_name is None:
+        split_names = ["metric_manifest"]
+    else:
+        split_names = [args.split_name] if args.split_name is not None else [
+            "day_right",
+            "night_right",
+        ]
 
     for split_name in split_names:
-        split_indices = select_query_indices(
-            query_paths=query_paths,
-            split_name=split_name,
-            min_index=args.min_index,
-            max_index=args.max_index,
+        split_indices = (
+            list(range(len(query_paths)))
+            if split_name == "metric_manifest"
+            else select_query_indices(
+                query_paths=query_paths,
+                split_name=split_name,
+                min_index=args.min_index,
+                max_index=args.max_index,
+            )
         )
 
         if len(split_indices) == 0:
@@ -441,7 +742,9 @@ def main():
 
         # 按 split 单独算相似度矩阵：序列匹配要求 query 在时间上连续且有序，
         # 跨 split 混在一起做对角线聚合是没有意义的。
-        similarities = query_features[split_indices] @ database_features.T
+        retrieval_started = time.perf_counter()
+        raw_similarities = query_features[split_indices] @ database_features.T
+        similarities = raw_similarities
 
         if args.seq_window > 0:
             similarities = sequence_rerank(
@@ -454,19 +757,32 @@ def main():
         top_scores, split_top_indices = torch.topk(
             similarities, k=min(args.top_k, database_features.shape[0]), dim=1
         )
-
-        confidences = top_scores[:, 0]
+        retrieval_seconds = time.perf_counter() - retrieval_started
+        sequence_scores = top_scores[:, 0].clone()
+        retrieval_scores = raw_similarities.gather(
+            1, split_top_indices[:, :1]
+        ).squeeze(1)
+        geometric_stats = None
+        geometry_seconds = 0.0
 
         if args.geometric_verify:
-            split_top_indices, top_scores, confidences = apply_geometric_verification(
+            geometry_started = time.perf_counter()
+            split_top_indices, top_scores, geometric_stats = apply_geometric_verification(
                 query_paths=split_query_paths,
                 database_paths=database_paths,
                 top_indices=split_top_indices,
                 top_scores=top_scores,
-                inlier_threshold=args.inlier_threshold,
                 mode=args.geometric_mode,
                 verifier=args.verifier,
             )
+            geometry_seconds = time.perf_counter() - geometry_started
+            if args.geometric_mode == "rerank":
+                sequence_scores = top_scores[:, 0].clone()
+                retrieval_scores = raw_similarities.gather(
+                    1, split_top_indices[:, :1]
+                ).squeeze(1)
+
+        signals = build_signals(retrieval_scores, sequence_scores, geometric_stats)
 
         metrics = evaluate_retrieval(
             query_paths=split_query_paths,
@@ -475,33 +791,102 @@ def main():
             recall_ks=args.recall_ks,
             precision_k=args.precision_k,
             tolerance=args.tolerance,
+            ground_truth=ground_truth,
         )
+        metrics.update(bootstrap_retrieval_cis(
+            query_paths=split_query_paths,
+            database_paths=database_paths,
+            top_indices=split_top_indices,
+            recall_ks=args.recall_ks,
+            tolerance=args.tolerance,
+            samples=args.bootstrap_samples,
+            seed=args.bootstrap_seed,
+            ground_truth=ground_truth,
+        ))
+        metrics["runtime/retrieval_ms_per_query"] = (
+            1000 * retrieval_seconds / len(split_query_paths)
+        )
+        if args.geometric_verify:
+            metrics["runtime/geometry_ms_per_query"] = (
+                1000 * geometry_seconds / len(split_query_paths)
+            )
 
         recall_100p, threshold = recall_at_full_precision(
             query_paths=split_query_paths,
             database_paths=database_paths,
             top_indices=split_top_indices,
-            confidences=confidences,
+            confidences=signals["sequence_score"],
             tolerance=args.tolerance,
+            ground_truth=ground_truth,
         )
-        metrics["recall@100%precision"] = recall_100p
+        metrics["oracle/sequence_recall@100%precision"] = recall_100p
 
-        if args.db_exclude_range is not None:
-            metrics.update(open_set_metrics(
+        top1_correct, has_match = open_set_targets(
+            split_query_paths, database_paths, split_top_indices, args.tolerance,
+            ground_truth,
+        )
+        accepted = None
+
+        if args.db_exclude_range is not None or ground_truth is not None:
+            metrics["open_set/sequence_auprc"] = open_set_average_precision(
+                signals["sequence_score"], top1_correct, has_match
+            )
+            oracle = sweep_open_set(
                 query_paths=split_query_paths,
                 database_paths=database_paths,
                 top_indices=split_top_indices,
-                confidences=confidences,
+                confidences=signals["sequence_score"],
                 tolerance=args.tolerance,
-                threshold=float(args.inlier_threshold) if args.geometric_verify else 0.0,
-            ))
-            metrics.update(sweep_open_set(
-                query_paths=split_query_paths,
-                database_paths=database_paths,
-                top_indices=split_top_indices,
-                confidences=confidences,
-                tolerance=args.tolerance,
-            ))
+                ground_truth=ground_truth,
+            )
+            metrics.update({f"oracle/{key}": value for key, value in oracle.items()})
+
+            if args.fit_thresholds:
+                gate_config, fit_metrics = fit_gate(
+                    args.gate_mode, signals, top1_correct, has_match
+                )
+                gate_config["fitted_on"] = {
+                    "split_name": split_name,
+                    "min_index": args.min_index,
+                    "max_index": args.max_index,
+                    "db_exclude_range": args.db_exclude_range,
+                    "tolerance": args.tolerance,
+                }
+                gate_config["pipeline"] = pipeline_config
+                Path(args.thresholds_out).parent.mkdir(parents=True, exist_ok=True)
+                Path(args.thresholds_out).write_text(
+                    json.dumps(gate_config, indent=2), encoding="utf-8"
+                )
+                metrics.update({f"validation_gate/{key}": value for key, value in fit_metrics.items()})
+
+            if gate_config is not None and args.thresholds_in:
+                accepted = apply_gate(gate_config, signals)
+                gate_confidences = gate_scores(gate_config, signals)
+                deployed = open_set_metrics(
+                    query_paths=split_query_paths,
+                    database_paths=database_paths,
+                    top_indices=split_top_indices,
+                    confidences=gate_confidences,
+                    tolerance=args.tolerance,
+                    accepted=accepted,
+                    ground_truth=ground_truth,
+                )
+                metrics.update({f"deployed/{key}": value for key, value in deployed.items()})
+                metrics.update(bootstrap_open_set_cis(
+                    accepted, top1_correct, has_match,
+                    samples=args.bootstrap_samples, seed=args.bootstrap_seed,
+                ))
+
+        if args.proposals_out:
+            proposal_path = Path(args.proposals_out)
+            if len(split_names) > 1:
+                proposal_path = proposal_path.with_name(
+                    f"{proposal_path.stem}_{split_name}{proposal_path.suffix or '.json'}"
+                )
+            write_proposals(
+                proposal_path, split_query_paths, database_paths, split_top_indices,
+                signals, geometric_stats, accepted,
+            )
 
         print_metrics(
             split_name=split_name,
@@ -511,6 +896,9 @@ def main():
             min_index=args.min_index,
             max_index=args.max_index,
             extra_lines=_describe_config(args, threshold),
+            distance_threshold_m=(
+                args.distance_threshold_m if ground_truth is not None else None
+            ),
         )
 
 
@@ -523,11 +911,14 @@ def _describe_config(args, threshold) -> list[str]:
         )
     if args.geometric_verify:
         lines.append(
-            f"几何验证: {args.verifier}+RANSAC mode={args.geometric_mode} "
-            f"inlier_threshold={args.inlier_threshold}"
+            f"几何验证: {args.verifier}+RANSAC mode={args.geometric_mode}"
         )
+    if args.thresholds_in:
+        lines.append(f"部署 gate: {args.gate_mode} thresholds={args.thresholds_in}")
+    elif args.fit_thresholds:
+        lines.append(f"验证集拟合 gate: {args.gate_mode} -> {args.thresholds_out}")
     if threshold != float("inf"):
-        lines.append(f"零假阳性时的置信度阈值: {threshold:.4f}")
+        lines.append(f"oracle 零假阳性序列分数阈值: {threshold:.4f}")
     return lines
 
 
