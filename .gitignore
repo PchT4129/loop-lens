@@ -17,8 +17,18 @@ PROJECT_REVIEW_NOTES_VPR_CN.md
 VPR_INTERVIEW_DEEP_DIVE_CN.md
 VPR_LOOP_CLOSURE_INTERVIEW_VIVA_GUIDE_CN.md
 VPR_LOOP_CLOSURE_PROJECT_GUIDE_CN.md
+DEPLOY_WALKTHROUGH_CN.md
 
 # SLAM 运行产物：特征缓存与日志（轨迹保留，便于复现对比）
 slam/runs/*.pt
 slam/runs/*.log
 slam/runs/*.records.npy
+
+# 部署子项目的生成产物：模型图、引擎、trace 都是大二进制且可重新生成。
+# 小体积的结果（*.json 指标、*.csv 测量表、*.png 图）要提交，它们是证据。
+deploy/results/*.onnx
+deploy/results/*.engine
+deploy/results/*.plan
+deploy/results/*.trace.json
+deploy/results/*.trace.json.gz
+deploy/results/engines/
