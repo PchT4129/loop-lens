@@ -1,0 +1,25 @@
+{
+  "generated_at": "2026-09-28T13:14:49",
+  "free_gb": 10.77,
+  "total_gb": 11.91,
+  "rows": [
+    {
+      "label": "舒适 2 GB",
+      "gb": 2.0,
+      "write_gb_s": 590.0,
+      "median_ms": 3.64
+    },
+    {
+      "label": "0.85×可用",
+      "gb": 9.15,
+      "write_gb_s": 444.9,
+      "median_ms": 22.09
+    },
+    {
+      "label": "1.25×可用",
+      "gb": 13.46,
+      "write_gb_s": 35.8,
+      "median_ms": 403.32
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "generated_at": "2026-09-28T13:14:59",
+  "per_forward_counts": {
+    "1": {
+      "implicit_convolve_sgemm": 1.0,
+      "elementwise_kernel": 26.0,
+      "CatArrayBatchedCopy": 1.0,
+      "vectorized_elementwise_kernel": 38.0,
+      "vectorized_layer_norm_kernel": 25.0,
+      "Kernel2": 48.0,
+      "flash_fwd_splitkv_kernel": 12.0,
+      "flash_fwd_splitkv_combine_kernel": 12.0,
+      "splitKreduce_kernel": 12.0,
+      "reduce_kernel": 2.0
+    },
+    "32": {
+      "kern_precompute_indices": 1.0,
+      "precomputed_convolve_sgemm": 1.0,
+      "elementwise_kernel": 27.0,
+      "CatArrayBatchedCopy": 1.0,
+      "vectorized_layer_norm_kernel": 25.0,
+      "Kernel2": 48.0,
+      "flash_fwd_kernel": 12.0,
+      "vectorized_elementwise_kernel": 37.0,
+      "reduce_kernel": 2.0
+    }
+  },
+  "differences": {
+    "elementwise_kernel": {
+      "b1": 26.0,
+      "b32": 27.0
+    },
+    "flash_fwd_kernel": {
+      "b1": 0,
+      "b32": 12.0
+    },
+    "flash_fwd_splitkv_combine_kernel": {
+      "b1": 12.0,
+      "b32": 0
+    },
+    "flash_fwd_splitkv_kernel": {
+      "b1": 12.0,
+      "b32": 0
+    },
+    "implicit_convolve_sgemm": {
+      "b1": 1.0,
+      "b32": 0
+    },
+    "kern_precompute_indices": {
+      "b1": 0,
+      "b32": 1.0
+    },
+    "precomputed_convolve_sgemm": {
+      "b1": 0,
+      "b32": 1.0
+    },
+    "splitKreduce_kernel": {
+      "b1": 12.0,
+      "b32": 0
+    },
+    "vectorized_elementwise_kernel": {
+      "b1": 38.0,
+      "b32": 37.0
+    }
+  },
+  "totals": {
+    "1": 177.0,
+    "32": 154.0
+  }
+}

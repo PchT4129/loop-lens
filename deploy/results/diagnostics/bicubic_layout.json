@@ -1,0 +1,30 @@
+{
+  "generated_at": "2026-09-28T13:14:51",
+  "channels": {
+    "48": 18.4,
+    "96": 28.2,
+    "192": 48.8,
+    "384": 91.6,
+    "768": 177.6
+  },
+  "out_size": {
+    "8": 116.2,
+    "16": 91.7,
+    "32": 239.1,
+    "64": 241.3
+  },
+  "layout": {
+    "不连续视图 + scale_factor": 716.5,
+    "不连续视图 + size": 715.9,
+    "连续 NCHW + scale_factor": 91.6,
+    "连续 NCHW + size": 91.6
+  },
+  "layout_slowdown_x": 7.82,
+  "noncontig_strides": [
+    525696,
+    1,
+    14208,
+    384
+  ],
+  "outputs_bit_identical": true
+}
