@@ -370,12 +370,94 @@ open-set is synthetic (removed frame range, not real distractors); the pose
 graph has no map points and runs no bundle adjustment, which is where the
 remaining KITTI error lives.
 
+## Deployment Subproject (`deploy/`)
+
+Inference profiling and deployment optimisation of the DINOv2 VPR front end,
+started 2026-09-26. Stages 0–3 are done; stage 4 (optimisation ladder:
+`torch.compile` → ONNX → TensorRT FP16 → INT8 → FP8/FP4) and stage 5
+(per-layer quantisation sensitivity) are the main line. Public summary:
+`deploy/README.md`; full record: `deploy/EXPERIMENTS.md` (Chinese).
+
+**The question** is not latency ("loop closure is slow" is false — it is off the
+real-time path) but the accuracy cost and knee of each optimisation under a
+shared GPU compute/memory/power budget. Accuracy is always measured with the
+unmodified `src/evaluate.py` frozen-gate protocol.
+
+### Environment
+
+A separate conda env, `vpr-deploy` (python 3.11), cloned from
+`vpr-loop-closure` so the PyTorch build is identical (torch 2.11.0+cu128,
+native sm_120). Adds onnx, onnxscript and `tensorrt-cu12==10.16.1.11`
+(cu12 to share the CUDA 12.x runtime with torch; 10.x over 11.x for
+documentation coverage). The pip TensorRT wheel ships no `trtexec`: engines
+are built through the Python API. Not installed on purpose: onnxruntime-gpu,
+nvidia-modelopt, Nsight Systems/Compute — ask before adding any of them.
+
+### How `deploy/` relates to `src/`
+
+It consumes `src/` only through public contracts and does not modify it:
+`DINOv2FeatureExtractor` (model source), the `{features, paths, meta}`
+artifact (so `src/evaluate.py` scores any runtime's features unchanged), and
+`get_default_transform` (preprocessing must be bit-identical, calibration
+data included). `deploy/export/wrapper.py::VPRDescriptor` bakes the
+interpolated positional embedding into a buffer and returns a tensor; it is
+**bit-identical** to the original on all 300 images
+(`python -m deploy.export.wrapper --self-check` is a hard gate).
+
+One planned `src/` change, approved but not yet made: an
+`--allow-runtime-mismatch` flag in `src/evaluate.py` that ignores only
+`feature_meta.runtime` when comparing a frozen gate's pipeline, so a gate
+fitted on FP32 features can be applied to TensorRT/INT8 features.
+
+### Reference numbers (do not re-derive)
+
+- FP32 reference features: `deploy/results/ref/fp32_{database,query}.pt`
+  (gitignored; regenerate with `src.extract_features`, dinov2_vits14, mean, 224).
+- Frozen gate for every later variant:
+  `deploy/results/protocol/ref_fp32/gate_similarity.json` (threshold 0.6841).
+- Primary accuracy metric: **deployed F1 = 0.8478 [0.7473, 0.9263]** (5000
+  bootstrap samples). Oracle best F1 0.874 is a separability number only.
+- Machine: bandwidth 574 GB/s; FP32/TF32/FP16/BF16 17.6/28.1/54.5/59.8 TFLOP/s.
+- Batch 1 is CPU-launch-bound (~2 ms floor, GPU busy ~30% at BF16).
+
+### Measurement discipline (each rule exists because its absence produced a wrong number)
+
+1. Time with CUDA events, warm up, report median/p90/p99; use
+   `deploy/bench/timing.py::time_cuda`, never `time.time()` around a call.
+2. `ramp_clocks()` before a sweep; discard the first measurement of a session.
+3. Record peak allocated/reserved against free VRAM — under WSL2,
+   oversubscription silently pages to system memory instead of raising OOM.
+4. Never compare two configs measured in size/time order: run a second pass in
+   reverse, or interleave. For batch-1 comparisons use paired interleaved
+   rounds (`_paired_rounds` in `bench_torch.py`) — an intermittent CPU-side
+   slow state can double latency.
+5. Compare memory with **one model resident at a time**.
+6. `torch.profiler` slows the CPU: take kernel time from the profiler and wall
+   clock from an unprofiled run; exclude `record_function` annotations, which
+   are mirrored onto the GPU timeline.
+7. Cosine similarity has a ~2e-7 noise floor in FP32.
+8. Write the expected value in `EXPERIMENTS.md` **before** measuring; append
+   expectation, measurement, explanation and conditions. Corrections are
+   appended, never silently overwritten.
+9. Every claim in the ledger must have committed code that regenerates it
+   (`deploy/diagnostics/` holds the one-off experiments).
+
+### Working agreement with the user
+
+Stop and report at the end of each stage; ask before large downloads or
+installs. The user is new to the systems side: `DEPLOY_WALKTHROUGH_CN.md` at the
+repo root (local only, gitignored) explains every concept in
+"what / why / what we are doing" form, assuming no prior knowledge. Keep it in
+sync when a conclusion changes.
+
 ## Documentation Map
 
 Analysis docs are written in **Chinese**; the README is in English. Match the
 language of the file you are editing.
 
 - `README.md` — the public narrative, classic-vs-modern framing, all results.
+- `deploy/README.md` — public summary of the deployment subproject (English).
+- `deploy/EXPERIMENTS.md` — deployment experiment ledger (Chinese, append-only).
 - `docs/experiments.md` — full ablation including negative results and the
   KITTI error decomposition.
 - `docs/v4_evaluation_and_gating.md` — frozen-gate protocol walkthrough.
@@ -392,6 +474,7 @@ learning note all need updating; they are cross-referenced.
 ## File Organization
 
 - `src/` — all modules are runnable as `python -m src.<module>`.
+- `deploy/` — deployment subproject, runnable as `python -m deploy.<pkg>.<module>`; compiled by CI but not unit-tested (it needs a GPU).
 - `tests/` — CPU-only unittest suite, no dataset required.
 - `scripts/` — dataset prep, ablations, smoke suite.
 - `slam/configs/` — ORB-SLAM3 YAML pairs (`*_loop_on/off.yaml`);
@@ -404,3 +487,4 @@ learning note all need updating; they are cross-referenced.
   `*_CN.md` prep drafts and `docs/learning-notes/` are untracked for the same
   reason; do not commit them without asking, the GitHub remote is public.
 - `.gitignore` excludes `data/`, `*.pt`, checkpoints, Python cache.
+- The GitHub remote was renamed to `PchT4129/loop-lens` (public); the local directory and the `vpr-loop-closure` conda env keep the old name.
