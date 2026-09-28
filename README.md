@@ -31,6 +31,22 @@ table by 3.3 points. The repository therefore reports bootstrap intervals and
 separates **validation-time gate fitting** from **frozen-threshold test
 evaluation**. Historical oracle sweeps remain labelled as such for provenance.
 
+### In progress: inference profiling and deployment
+
+A follow-up subproject in [`deploy/`](deploy/README.md) asks what each inference
+optimisation — and low-precision quantisation in particular — costs in VPR
+accuracy when the front end shares a robot's GPU budget. Profiling is done; the
+TensorRT/INT8 ladder is next. Established so far:
+
+- **Batch 1 is CPU-launch-bound.** From FP32 to BF16 the GPU work gets 3.5×
+  faster, but end-to-end latency only 1.29× — the GPU is idle ~70% of the time,
+  waiting for ~170 kernel launches.
+- **A layout bug in DINOv2's positional-embedding interpolation** makes one
+  bicubic kernel 7.8× slower than necessary (~46% of GPU work at BF16 batch 1);
+  baking the embedding removes it, bit-exact.
+- **Accuracy is scored with this repository's frozen-gate protocol unchanged**:
+  the FP32 reference reproduces deployed F1 0.848 [0.747, 0.926] bit-for-bit.
+
 ## Overview
 
 The system is a five-stage loop-closure pipeline. Each stage has a classic and a
@@ -88,7 +104,7 @@ more than the choice of loss.
 ## Project Structure
 
 ```text
-vpr-loop-closure/
+loop-lens/
   data/
     gardens_point/
       database/
@@ -128,6 +144,7 @@ vpr-loop-closure/
     visualize.py
     visualize_proposal.py        # render gate evidence and decisions
   tests/                         # confidence, metrics and causality tests
+  deploy/                        # inference profiling & deployment (see deploy/README.md)
   README.md
 ```
 
