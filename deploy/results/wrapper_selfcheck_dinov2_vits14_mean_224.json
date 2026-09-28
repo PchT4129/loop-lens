@@ -1,0 +1,18 @@
+{
+  "variant": "dinov2_vits14",
+  "aggregation": "mean",
+  "image_size": 224,
+  "database": {
+    "n": 100,
+    "max_abs_diff": 0.0,
+    "min_cosine": 0.9999998807907104,
+    "bit_identical": true
+  },
+  "query": {
+    "n": 200,
+    "max_abs_diff": 0.0,
+    "min_cosine": 0.9999998211860657,
+    "bit_identical": true
+  },
+  "passed": true
+}

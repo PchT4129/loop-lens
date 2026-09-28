@@ -1,0 +1,104 @@
+[
+  {
+    "experiment": "posembed_bake",
+    "precision": "fp32",
+    "batch": 1,
+    "a_median_ms": 4.3862,
+    "b_median_ms": 3.6601,
+    "paired_diff_median_ms": 0.7278,
+    "paired_diff_iqr_ms": [
+      0.5525,
+      0.7679
+    ],
+    "rounds_b_faster": 10,
+    "rounds": 10,
+    "saved_pct": 16.59
+  },
+  {
+    "experiment": "posembed_bake",
+    "precision": "fp32",
+    "batch": 8,
+    "a_median_ms": 13.2112,
+    "b_median_ms": 12.6406,
+    "paired_diff_median_ms": 0.4469,
+    "paired_diff_iqr_ms": [
+      0.2396,
+      0.7881
+    ],
+    "rounds_b_faster": 9,
+    "rounds": 10,
+    "saved_pct": 3.38
+  },
+  {
+    "experiment": "posembed_bake",
+    "precision": "bf16",
+    "batch": 1,
+    "a_median_ms": 2.8332,
+    "b_median_ms": 2.621,
+    "paired_diff_median_ms": 0.1759,
+    "paired_diff_iqr_ms": [
+      -0.0112,
+      0.3348
+    ],
+    "rounds_b_faster": 7,
+    "rounds": 10,
+    "saved_pct": 6.21
+  },
+  {
+    "experiment": "posembed_bake",
+    "precision": "bf16",
+    "batch": 8,
+    "a_median_ms": 4.9571,
+    "b_median_ms": 4.2602,
+    "paired_diff_median_ms": 0.7313,
+    "paired_diff_iqr_ms": [
+      0.6056,
+      0.7813
+    ],
+    "rounds_b_faster": 10,
+    "rounds": 10,
+    "saved_pct": 14.75
+  },
+  {
+    "experiment": "autocast_vs_cast",
+    "batch": 1,
+    "a_median_ms": 3.5571,
+    "b_median_ms": 2.4945,
+    "paired_diff_median_ms": 1.0261,
+    "paired_diff_iqr_ms": [
+      0.9343,
+      1.1471
+    ],
+    "rounds_b_faster": 10,
+    "rounds": 10
+  },
+  {
+    "experiment": "autocast_vs_cast",
+    "batch": 8,
+    "a_median_ms": 5.2615,
+    "b_median_ms": 4.2898,
+    "paired_diff_median_ms": 0.9898,
+    "paired_diff_iqr_ms": [
+      0.7533,
+      1.1582
+    ],
+    "rounds_b_faster": 10,
+    "rounds": 10
+  },
+  {
+    "experiment": "autocast_vs_cast_memory",
+    "batch": 1,
+    "autocast_weights_mb": 82.5,
+    "autocast_peak_alloc_gb": 0.103,
+    "cast_weights_mb": 41.3,
+    "cast_peak_alloc_gb": 0.063
+  },
+  {
+    "experiment": "autocast_vs_cast_memory",
+    "batch": 8,
+    "autocast_weights_mb": 82.5,
+    "autocast_peak_alloc_gb": 0.125,
+    "cast_weights_mb": 41.3,
+    "cast_peak_alloc_gb": 0.079
+  }
+]

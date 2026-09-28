@@ -1,0 +1,26 @@
+[开集] 从 database 移除帧号 30-39 共 10 张，剩余 90 张
+================================================================================
+Split: night_right
+Num queries: 50
+Tolerance: ±3 frames
+Index range: 0-49
+验证集拟合 gate: similarity -> deploy/results/protocol/ref_fp32/gate_similarity.json
+oracle 零假阳性序列分数阈值: 0.8447
+recall@1: 0.7800
+recall@5: 0.8600
+recall@10: 0.8600
+precision@5: 0.6400
+runtime/retrieval_ms_per_query: 0.0211
+oracle/sequence_recall@100%precision: 0.3400
+open_set/sequence_auprc: 0.8026
+oracle/open_set/best_f1: 0.8571
+oracle/open_set/best_f1_threshold: 0.6841
+oracle/open_set/recall@100%precision: 0.3696
+oracle/open_set/threshold@100%precision: 0.8447
+validation_gate/precision: 0.8667
+validation_gate/recall: 0.8478
+validation_gate/f1: 0.8571
+validation_gate/TP: 39.0000
+validation_gate/FP: 6.0000
+validation_gate/FN: 2.0000
+validation_gate/TN: 3.0000
