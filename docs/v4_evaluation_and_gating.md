@@ -339,7 +339,7 @@ python -m src.visualize_proposal \
   --output outputs/visualizations/gate_decision.png
 ```
 
-当前 README 中的 false-negative 示例正是由该接口生成：候选在 `±3` 帧真值下
+`docs/results.md` 中的 false-negative 示例正是由该接口生成：候选在 `±3` 帧真值下
 正确、几何内点率为 0.583，但冻结的序列阈值仍将它拒绝。这比单纯展示 Top-5
 图片更能解释系统为什么犯错。
 
