@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-python -m compileall -q src
+python -m compileall -q src deploy
 python -m unittest discover -s tests -v
 
 DB_FEATURES=outputs/v3/dino_mean_database.pt
