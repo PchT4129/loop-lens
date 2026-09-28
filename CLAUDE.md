@@ -452,10 +452,17 @@ sync when a conclusion changes.
 
 ## Documentation Map
 
-Analysis docs are written in **Chinese**; the README is in English. Match the
-language of the file you are editing.
+Analysis docs are written in **Chinese**; the README is in English with a
+Chinese twin. Match the language of the file you are editing.
 
-- `README.md` — the public narrative, classic-vs-modern framing, all results.
+- `README.md` / `README.zh-CN.md` — the recruiter-facing summary (~130 lines):
+  headline results, pipeline, what the measurements changed, the deployment work
+  in progress, limitations. The two must carry the same content and numbers;
+  keep them short and move detail to `docs/`.
+- `docs/results.md` — every result table, qualitative figure, discussion and next
+  steps (English; moved out of the README unchanged).
+- `docs/usage.md` — installation, dataset, every command and flag (English; moved
+  out of the README unchanged).
 - `deploy/README.md` — public summary of the deployment subproject (English).
 - `deploy/EXPERIMENTS.md` — deployment experiment ledger (Chinese, append-only).
 - `docs/experiments.md` — full ablation including negative results and the
@@ -468,8 +475,9 @@ language of the file you are editing.
   appendices + glossary).
 - `*_CN.md` at repo root — interview prep drafts.
 
-When a result changes, the README table, `docs/experiments.md` and the relevant
-learning note all need updating; they are cross-referenced.
+When a result changes, update `docs/results.md`, `docs/experiments.md`, the
+relevant learning note, and — if it is a headline number — both READMEs; they are
+cross-referenced. Every number in the READMEs must trace to one of those files.
 
 ## File Organization
 
