@@ -1,0 +1,174 @@
+{
+  "timestamp": "2026-09-27T00:09:51",
+  "python": "3.11.15",
+  "checks": [
+    {
+      "check": "Python",
+      "status": "PASS",
+      "detail": "3.11.15 (prefix=~/miniforge3/envs/vpr-deploy)",
+      "version": "3.11.15"
+    },
+    {
+      "check": "pkg:torch",
+      "status": "PASS",
+      "detail": "2.11.0+cu128",
+      "version": "2.11.0+cu128"
+    },
+    {
+      "check": "pkg:torchvision",
+      "status": "PASS",
+      "detail": "0.26.0+cu128",
+      "version": "0.26.0+cu128"
+    },
+    {
+      "check": "pkg:onnx",
+      "status": "PASS",
+      "detail": "1.23.0",
+      "version": "1.23.0"
+    },
+    {
+      "check": "pkg:onnxscript",
+      "status": "PASS",
+      "detail": "0.7.2",
+      "version": "0.7.2"
+    },
+    {
+      "check": "pkg:onnxruntime-gpu",
+      "status": "WARN",
+      "detail": "未安装（可选，计划已按缺失设计降级路径）"
+    },
+    {
+      "check": "pkg:nvidia-modelopt",
+      "status": "WARN",
+      "detail": "未安装（可选，计划已按缺失设计降级路径）"
+    },
+    {
+      "check": "pkg:numpy",
+      "status": "PASS",
+      "detail": "2.4.3",
+      "version": "2.4.3"
+    },
+    {
+      "check": "pkg:matplotlib",
+      "status": "PASS",
+      "detail": "3.10.9",
+      "version": "3.10.9"
+    },
+    {
+      "check": "pkg:pillow",
+      "status": "PASS",
+      "detail": "12.1.1",
+      "version": "12.1.1"
+    },
+    {
+      "check": "pkg:tensorrt",
+      "status": "PASS",
+      "detail": "10.16.1.11",
+      "version": "10.16.1.11"
+    },
+    {
+      "check": "TRT 平台能力",
+      "status": "PASS",
+      "detail": "fast FP16=True | fast INT8=True",
+      "platform_has_fast_fp16": true,
+      "platform_has_fast_int8": true
+    },
+    {
+      "check": "torch.version",
+      "status": "PASS",
+      "detail": "2.11.0+cu128 (built for CUDA 12.8)"
+    },
+    {
+      "check": "GPU",
+      "status": "PASS",
+      "detail": "NVIDIA GeForce RTX 5070 Ti Laptop GPU | sm_120 | 46 SM | 11.91 GB",
+      "gpu_name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "capability": "sm_120",
+      "sm_count": 46,
+      "total_vram_gb": 11.91
+    },
+    {
+      "check": "sm_120 原生支持",
+      "status": "PASS",
+      "detail": "arch_list=['sm_75', 'sm_80', 'sm_86', 'sm_90', 'sm_100', 'sm_120']",
+      "arch_list": [
+        "sm_75",
+        "sm_80",
+        "sm_86",
+        "sm_90",
+        "sm_100",
+        "sm_120"
+      ]
+    },
+    {
+      "check": "驱动",
+      "status": "PASS",
+      "detail": "616.92",
+      "driver_version": "616.92"
+    },
+    {
+      "check": "显存现状",
+      "status": "PASS",
+      "detail": "可用 10.77 GB / 共 11.91 GB（其余被 Windows 侧占用）",
+      "free_vram_gb": 10.77,
+      "total_vram_gb": 11.91
+    },
+    {
+      "check": "显存溢出探测 ⭐",
+      "status": "WARN",
+      "detail": "超额申请 13.46 GB 成功但带宽塌陷：426 -> 35 GB/s（12.1x）。这是 WSL2 的 WDDM 分页行为，靠控制面板设置关不掉。防护改为：每个测量点记录峰值显存，超过物理容量的配置标记为不可信",
+      "baseline_write_gbs": 425.6,
+      "spill_write_gbs": 35.1,
+      "slowdown_x": 12.1,
+      "oom_as_expected": false
+    },
+    {
+      "check": "时钟与功耗基线",
+      "status": "PASS",
+      "detail": "SM 1515/3090 MHz | 显存 9001 MHz | 功耗 17.62/[N/A] W (上限 140.00 W) | 52°C | 占用 1%",
+      "clocks_sm_mhz": "1515",
+      "clocks_sm_max_mhz": "3090",
+      "clocks_mem_mhz": "9001",
+      "power_draw_w": "17.62",
+      "power_limit_w": "[N/A]",
+      "power_max_limit_w": "140.00",
+      "temperature_c": "52",
+      "utilization_pct": "1"
+    },
+    {
+      "check": "电源状态",
+      "status": "PASS",
+      "detail": "['BAT1', 'AC1']",
+      "power_supply_visible": true
+    },
+    {
+      "check": "WSL2 内存",
+      "status": "PASS",
+      "detail": "23.5 GB 可见内存 / 24 核",
+      "wsl_memory_gb": 23.5,
+      "cpu_count": 24
+    },
+    {
+      "check": ".wslconfig",
+      "status": "PASS",
+      "detail": "/mnt/c/Users/<user>/.wslconfig: '[wsl2]  \\nmemory=24GB  \\nswap=8GB'",
+      "path": "/mnt/c/Users/<user>/.wslconfig",
+      "content": "[wsl2]  \nmemory=24GB  \nswap=8GB"
+    },
+    {
+      "check": "tool:nsys",
+      "status": "WARN",
+      "detail": "未安装（阶段 3 用 torch.profiler + 墙钟/kernel 和判据替代）"
+    },
+    {
+      "check": "tool:ncu",
+      "status": "WARN",
+      "detail": "未安装（WSL2 支持有限，计划未依赖）"
+    },
+    {
+      "check": "tool:trtexec",
+      "status": "WARN",
+      "detail": "未安装（pip 的 tensorrt wheel 不含它；本项目走 Python API 建引擎）"
+    }
+  ]
+}

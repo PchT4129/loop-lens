@@ -1,0 +1,25 @@
+# 推理剖析与部署优化子项目的依赖（env: vpr-deploy, python 3.11）
+#
+# 为什么单独一个 env：TensorRT 会带进一整套 CUDA 运行时库，不应污染 vpr-loop-closure。
+# 为什么 python 3.11 而不是 base 的 3.13：onnxruntime-gpu / TensorRT 的 wheel 对
+# 3.13 支持滞后，cp313 轮子常常缺位。
+#
+# 本 env 由克隆 vpr-loop-closure 得到（conda create -n vpr-deploy --clone vpr-loop-closure），
+# 所以 torch 版本与项目基线严格一致——这是延迟数字可比的前提，不要单独升级它。
+#   torch==2.11.0+cu128
+#   torchvision==0.26.0+cu128
+
+# --- ONNX 导出链 ---
+onnx>=1.23,<2
+onnxscript>=0.7,<1          # torch 2.11 的 torch.onnx.export(dynamo=True) 依赖它
+
+# --- TensorRT ---
+# 选 cu12 而非 cu13：与 torch 的 cu128 同一条 CUDA 12.x 运行时，避免同进程两个 runtime 冲突。
+# 选 10.x 最新而非 11.x：sm_120 自 10.8 起支持，10.16 功能覆盖足够（含 FP8/NVFP4 路径），
+# 而 11.x 太新、文档与社区案例少。
+tensorrt-cu12==10.16.1.11
+
+# --- 可选，当前未安装（计划已按缺失设计降级路径）---
+# onnxruntime-gpu           # 阶段4 R3 档的延迟数据；缺它则该档只做导出与数值核对
+# nvidia-modelopt           # 阶段5 显式 Q/DQ 逐层敏感度；退路是 TRT 的 ILayer.precision
+# Nsight Systems (nsys)     # 阶段3 时间线剖析；退路见计划阶段3第5步
