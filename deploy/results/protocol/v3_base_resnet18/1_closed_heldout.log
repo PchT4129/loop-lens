@@ -1,0 +1,11 @@
+================================================================================
+Split: night_right
+Num queries: 30
+Tolerance: ±3 frames
+Index range: 70-99
+recall@1: 0.5000
+recall@5: 0.7667
+recall@10: 0.9000
+precision@5: 0.4333
+runtime/retrieval_ms_per_query: 1.0715
+oracle/sequence_recall@100%precision: 0.0000

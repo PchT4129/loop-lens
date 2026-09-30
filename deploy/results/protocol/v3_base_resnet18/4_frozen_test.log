@@ -1,0 +1,40 @@
+[开集] 从 database 移除帧号 70-79 共 10 张，剩余 90 张
+================================================================================
+Split: night_right
+Num queries: 50
+Tolerance: ±3 frames
+Index range: 50-99
+部署 gate: similarity thresholds=deploy/results/protocol/v3_base_resnet18/gate_similarity.json
+oracle 零假阳性序列分数阈值: 0.8683
+recall@1: 0.4800
+recall@5: 0.7800
+recall@10: 0.8400
+precision@5: 0.4280
+recall@1/ci95_low: 0.3400
+recall@1/ci95_high: 0.6200
+recall@5/ci95_low: 0.6600
+recall@5/ci95_high: 0.8800
+recall@10/ci95_low: 0.7400
+recall@10/ci95_high: 0.9400
+runtime/retrieval_ms_per_query: 0.0591
+oracle/sequence_recall@100%precision: 0.0200
+open_set/sequence_auprc: 0.2559
+oracle/open_set/best_f1: 0.5053
+oracle/open_set/best_f1_threshold: 0.6630
+oracle/open_set/recall@100%precision: 0.0217
+oracle/open_set/threshold@100%precision: 0.8683
+deployed/open_set/precision: 0.4483
+deployed/open_set/recall: 0.2826
+deployed/open_set/f1: 0.3467
+deployed/open_set/TP: 13.0000
+deployed/open_set/FP: 16.0000
+deployed/open_set/FN: 21.0000
+deployed/open_set/TN: 0.0000
+deployed/open_set/num_with_match: 46.0000
+deployed/open_set/num_without_match: 4.0000
+deployed/open_set/precision/ci95_low: 0.2609
+deployed/open_set/precision/ci95_high: 0.6333
+deployed/open_set/recall/ci95_low: 0.1522
+deployed/open_set/recall/ci95_high: 0.4167
+deployed/open_set/f1/ci95_low: 0.1944
+deployed/open_set/f1/ci95_high: 0.4935

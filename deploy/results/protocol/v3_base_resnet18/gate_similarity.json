@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "gate_mode": "similarity",
+  "sequence_threshold": 0.7549200654029846,
+  "fitted_on": {
+    "split_name": "night_right",
+    "min_index": 0,
+    "max_index": 49,
+    "db_exclude_range": [
+      30,
+      39
+    ],
+    "tolerance": 3
+  },
+  "pipeline": {
+    "seq_window": 0,
+    "seq_causal": false,
+    "seq_velocities": "1.0",
+    "geometric_verify": false,
+    "geometric_mode": "gate",
+    "verifier": null,
+    "ground_truth_protocol": "frame_index@3",
+    "feature_meta": {
+      "backbone": "resnet18",
+      "pooling": "gap",
+      "gem_p": null,
+      "image_size": 224,
+      "checkpoint": null,
+      "feature_dim": 512
+    }
+  }
+}
