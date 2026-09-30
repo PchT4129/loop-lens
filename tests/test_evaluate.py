@@ -8,6 +8,7 @@ from unittest.mock import patch
 import torch
 
 from src.evaluate import (
+    pipelines_match,
     apply_geometric_verification,
     bootstrap_open_set_cis,
     bootstrap_retrieval_cis,
@@ -103,3 +104,34 @@ class EvaluationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PipelineMatchTests(unittest.TestCase):
+    """--allow-runtime-mismatch 只能放开 runtime 这一个键。"""
+
+    def setUp(self):
+        self.fitted = {
+            "seq_window": 0,
+            "feature_meta": {"backbone": "dinov2_vits14", "pooling": "mean",
+                             "image_size": 224, "feature_dim": 384},
+        }
+
+    def _applied(self, **meta_overrides):
+        meta = {**self.fitted["feature_meta"], "runtime": {"kind": "tensorrt", "precision": "int8"}}
+        meta.update(meta_overrides)
+        return {**self.fitted, "feature_meta": meta}
+
+    def test_runtime_difference_rejected_by_default(self):
+        self.assertFalse(pipelines_match(self.fitted, self._applied()))
+
+    def test_runtime_difference_allowed_when_requested(self):
+        self.assertTrue(pipelines_match(self.fitted, self._applied(), ignore_runtime=True))
+
+    def test_other_meta_differences_still_rejected(self):
+        self.assertFalse(pipelines_match(self.fitted, self._applied(image_size=448),
+                                         ignore_runtime=True))
+
+    def test_pipeline_flag_differences_still_rejected(self):
+        applied = {**self._applied(), "seq_window": 15}
+        self.assertFalse(pipelines_match(self.fitted, applied, ignore_runtime=True))
+

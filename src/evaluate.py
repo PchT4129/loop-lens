@@ -489,6 +489,28 @@ def build_signals(
     }
 
 
+def pipelines_match(expected: dict | None, actual: dict, ignore_runtime: bool = False) -> bool:
+    """冻结 gate 的 pipeline 是否与当前运行一致。
+
+    ignore_runtime=True 时只忽略 feature_meta["runtime"] 这一个键：同一个模型换了执行方式
+    （PyTorch FP32 → TensorRT INT8）是我们**想要**测的变化；而 backbone、分辨率、聚合方式、
+    特征维度仍必须严格一致——那些变了说明配置出错，不能放行。
+    """
+    if expected is None:
+        return False
+    if not ignore_runtime:
+        return expected == actual
+
+    def strip(pipeline: dict) -> dict:
+        out = dict(pipeline)
+        meta = dict(out.get("feature_meta") or {})
+        meta.pop("runtime", None)
+        out["feature_meta"] = meta
+        return out
+
+    return strip(expected) == strip(actual)
+
+
 def write_proposals(
     output_path: str | Path,
     query_paths: list[str],
@@ -615,6 +637,11 @@ def main():
     parser.add_argument("--bootstrap-samples", type=int, default=0,
                         help=">0 时对 Recall@K 做 query bootstrap 95%% CI")
     parser.add_argument("--bootstrap-seed", type=int, default=0)
+    parser.add_argument(
+        "--allow-runtime-mismatch", action="store_true",
+        help="应用冻结 gate 时忽略 feature_meta.runtime（其余 meta 仍须严格一致）。"
+             "用于把 FP32 上拟合的 gate 应用到 TensorRT / INT8 等执行方式抽出的特征",
+    )
     parser.add_argument("--inlier-threshold", type=int, default=20,
                         help=argparse.SUPPRESS)
     args = parser.parse_args()
@@ -623,6 +650,8 @@ def main():
         parser.error("--fit-thresholds requires --thresholds-out")
     if args.fit_thresholds and args.thresholds_in:
         parser.error("fit and apply are separate phases; do not combine threshold flags")
+    if args.allow_runtime_mismatch and not args.thresholds_in:
+        parser.error("--allow-runtime-mismatch only applies when a frozen gate is given (--thresholds-in)")
     if args.fit_thresholds and args.split_name is None and args.ground_truth_manifest is None:
         parser.error("threshold fitting requires one explicit --split-name")
     if args.fit_thresholds and args.db_exclude_range is None and args.ground_truth_manifest is None:
@@ -682,11 +711,17 @@ def main():
         "feature_dim": int(query_features.shape[1]),
         "legacy_artifact_without_meta": True,
     }
-    if gate_config is not None and gate_config.get("pipeline") != pipeline_config:
+    if gate_config is not None and not pipelines_match(
+        gate_config.get("pipeline"), pipeline_config, ignore_runtime=args.allow_runtime_mismatch
+    ):
         parser.error(
             "threshold file was fitted for a different pipeline or feature configuration: "
             f"expected {gate_config.get('pipeline')}, got {pipeline_config}"
         )
+    if gate_config is not None and args.allow_runtime_mismatch:
+        fitted_rt = (gate_config["pipeline"].get("feature_meta") or {}).get("runtime", "pytorch-fp32 (unset)")
+        applied_rt = (pipeline_config.get("feature_meta") or {}).get("runtime", "pytorch-fp32 (unset)")
+        print(f"[runtime] gate fitted on {fitted_rt}; applied to {applied_rt}")
     ground_truth = (
         PairManifestGroundTruth.from_csv(
             args.ground_truth_manifest, args.distance_threshold_m
