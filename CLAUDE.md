@@ -373,9 +373,10 @@ remaining KITTI error lives.
 ## Deployment Subproject (`deploy/`)
 
 Inference profiling and deployment optimisation of the DINOv2 VPR front end,
-started 2026-09-26. Stages 0–3 and the stage-4 ladder up to INT8 are done
-(4a `torch.compile`, 4b ONNX → TensorRT FP16, 4c TensorRT INT8); FP8/FP4 and
-stage 5 (per-layer quantisation sensitivity, explicit Q/DQ) are next. Public summary:
+started 2026-09-26. Stages 0–3, the stage-4 ladder (4a `torch.compile`, 4b ONNX →
+TensorRT FP16, 4c TensorRT implicit INT8) and stage 5 (per-group quantisation
+sensitivity with ModelOpt, explicit Q/DQ INT8) and stage 6 (FP8 engine, NVFP4 in
+simulation) are done — the subproject is complete. Public summary:
 `deploy/README.md`; full record: `deploy/EXPERIMENTS.md` (Chinese).
 
 **The question** is not latency ("loop closure is slow" is false — it is off the
@@ -423,12 +424,34 @@ automatically when a frozen gate is passed. Four CPU unit tests guard the bounda
   bootstrap samples). Oracle best F1 0.874 is a separability number only.
 - Machine: bandwidth 574 GB/s; FP32/TF32/FP16/BF16 17.6/28.1/54.5/59.8 TFLOP/s.
 - Batch 1 is CPU-launch-bound (~2 ms floor, GPU busy ~30% at BF16).
-- Pareto front so far: **FP16 TensorRT + CUDA Graph** — 0.51 ms at b1, 7.6–7.9 ms
+- Pareto front (FP16 point): **FP16 TensorRT + CUDA Graph** — 0.51 ms at b1, 7.6–7.9 ms
   at b32, task metrics bit-identical to FP32. Implicit INT8 PTQ (entropy, day_right
   000–049 calibration) is past the knee: held-out R@1 0.933 → 0.633, deployed F1
   0.667 [0.533, 0.791], for only ×1.08 (b1) / ×1.10 (b32) and −20 MB. Cause: a few
   fixed LayerNorm-output channels carry activations up to 19× the typical channel
   max; per-tensor INT8 either clips them (entropy) or coarsens everything (minmax).
+- Stage 5 (`deploy/quant/`): the most sensitive group is `fc2` (the GELU output),
+  not the residual stream; per-group errors do not add up. Best point: **explicit
+  Q/DQ INT8 on qkv/proj/fc1 with SmoothQuant, fc2 and attention kept FP16** —
+  0.459 ms b1 (×1.14 vs FP16), 90 MB (−24%), held-out R@1 0.900, deployed F1
+  0.882 [0.796, 0.949], feature 1−cos 9.0e-4 (engine matches the PyTorch fake-quant
+  simulation). Max score shift is 2.5× the decision margin, so only FP16 is
+  free at the feature level. Export the ModelOpt model on **CPU** with the
+  TorchScript exporter: tracing on GPU segfaults, and dynamo cannot trace the
+  quantisers.
+- Stage 6: same groups, only the format changes. FP8 (E4M3) is 17× better than
+  INT8 on Linear activations, 7× worse on weights (3-bit mantissa; per-channel
+  scales barely help). **FP8 on every Linear** engine: 0.461 ms b1 (×1.13 vs FP16
+  inside a CUDA Graph, ×0.89 *without* one — +24 Q/DQ kernel launches), 50 MB,
+  R@1 0.900, deployed F1 0.826 [0.719, 0.915], 1−cos 5.7e-3, shift 4.5× margin.
+  Unattributed: b32 GPU work −14% but wall ×0.97; FP8 execution context 4 MB.
+  NVFP4 (simulation only): R@1 0.867, F1 0.727 — past the knee. NVFP4 export fails
+  on CPU (amax must be CUDA) and on GPU **silently drops every quantiser** (zero
+  Q/DQ nodes); `export_qdq.py` now errors out when enabled quantisers produce no
+  Q/DQ nodes. A real FP4 export would need the ModelOpt `[onnx]` extra (not installed).
+- Final recommendation: tightest memory → FP8 all-Linear; best low-precision
+  accuracy → selective INT8; zero false-positive tolerance → FP16; always inside a
+  CUDA Graph.
 
 ### Measurement discipline (each rule exists because its absence produced a wrong number)
 
@@ -458,12 +481,12 @@ Stop and report at the end of each stage; ask before large downloads or
 installs. The user is new to the systems side. The learning docs (local only,
 gitignored) cover both the main project and `deploy/`: the entry index is
 `LEARNING_GUIDE_CN.md` at the repo root, chapters live in `docs/learning-notes/`
-(00 primer, 01–09 main project, 10–17 deployment). Every concept is explained on
+(00 primer, 01–09 main project, 10+ deployment). Every concept is explained on
 first use ("what / why / which line of our code"), assuming no prior knowledge, and
 code is walked through line by line with `file:line` references. Previous versions
 (including the old `DEPLOY_WALKTHROUGH_CN.md`) are kept in `docs/learning-notes/_archive/`.
 Keep the chapters in sync when a conclusion changes; a new deployment stage gets its
-own chapter (next: 17, INT8) plus an index row in `LEARNING_GUIDE_CN.md`.
+own chapter (last: 19, FP8/NVFP4) plus an index row in `LEARNING_GUIDE_CN.md`.
 
 ## Documentation Map
 
@@ -471,8 +494,8 @@ Analysis docs are written in **Chinese**; the README is in English with a
 Chinese twin. Match the language of the file you are editing.
 
 - `README.md` / `README.zh-CN.md` — the recruiter-facing summary (~130 lines):
-  headline results, pipeline, what the measurements changed, the deployment work
-  in progress, limitations. The two must carry the same content and numbers;
+  headline results, pipeline, what the measurements changed, the deployment
+  subproject, limitations. The two must carry the same content and numbers;
   keep them short and move detail to `docs/`.
 - `docs/results.md` — every result table, qualitative figure, discussion and next
   steps (English; moved out of the README unchanged).
@@ -510,4 +533,4 @@ cross-referenced. Every number in the READMEs must trace to one of those files.
   `*_CN.md` prep drafts and `docs/learning-notes/` are untracked for the same
   reason; do not commit them without asking, the GitHub remote is public.
 - `.gitignore` excludes `data/`, `*.pt`, checkpoints, Python cache.
-- The GitHub remote is `PchT4129/loop-lens` (public) and the local directory is `loop_lens`; the `vpr-loop-closure` conda env keeps the old name.
+- The GitHub remote is `PchT4129/loop-lens` (public) and the local directory is `loop-lens`; the `vpr-loop-closure` conda env keeps the old name.
