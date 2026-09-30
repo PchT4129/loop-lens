@@ -1,0 +1,46 @@
+{
+  "compile_reduce_overhead_fp16": {
+    "cosine": {
+      "mean": 0.9999974370002747,
+      "min": 0.9999938011169434,
+      "p01": 0.9999947547912598,
+      "one_minus_mean": 2.562999725341797e-06
+    },
+    "retrieval_all": {
+      "queries": 200,
+      "top1_flips": 1,
+      "score_shift_mean_abs": 0.00010647296585375443,
+      "score_shift_max_abs": 0.00038927793502807617
+    },
+    "frozen_gate_test": {
+      "queries": 50,
+      "threshold": 0.6841380000114441,
+      "decision_flips": 0,
+      "top1_flips": 0,
+      "score_shift_mean_abs": 0.00013685226440429688,
+      "closest_margin_to_threshold": 0.0044092535972595215
+    }
+  },
+  "compile_default_fp16": {
+    "cosine": {
+      "mean": 0.9999974370002747,
+      "min": 0.9999938011169434,
+      "p01": 0.9999947547912598,
+      "one_minus_mean": 2.562999725341797e-06
+    },
+    "retrieval_all": {
+      "queries": 200,
+      "top1_flips": 1,
+      "score_shift_mean_abs": 0.00010647296585375443,
+      "score_shift_max_abs": 0.00038927793502807617
+    },
+    "frozen_gate_test": {
+      "queries": 50,
+      "threshold": 0.6841380000114441,
+      "decision_flips": 0,
+      "top1_flips": 0,
+      "score_shift_mean_abs": 0.00013685226440429688,
+      "closest_margin_to_threshold": 0.0044092535972595215
+    }
+  }
+}

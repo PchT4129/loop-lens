@@ -1,0 +1,90 @@
+{
+  "trt_fp16": {
+    "cosine": {
+      "mean": 0.9999876022338867,
+      "min": 0.9999490976333618,
+      "p01": 0.9999561309814453,
+      "one_minus_mean": 1.239776611328125e-05
+    },
+    "retrieval_all": {
+      "queries": 200,
+      "top1_flips": 2,
+      "score_shift_mean_abs": 0.00033586620702408254,
+      "score_shift_max_abs": 0.001497507095336914
+    },
+    "frozen_gate_test": {
+      "queries": 50,
+      "threshold": 0.6841380000114441,
+      "decision_flips": 0,
+      "top1_flips": 2,
+      "score_shift_mean_abs": 0.0003237187920603901,
+      "closest_margin_to_threshold": 0.0044092535972595215
+    }
+  },
+  "trt_int8_entropy_day": {
+    "cosine": {
+      "mean": 0.7396310567855835,
+      "min": 0.37421879172325134,
+      "p01": 0.47719159722328186,
+      "one_minus_mean": 0.2603689432144165
+    },
+    "retrieval_all": {
+      "queries": 200,
+      "top1_flips": 139,
+      "score_shift_mean_abs": 0.029637889936566353,
+      "score_shift_max_abs": 0.21983879804611206
+    },
+    "frozen_gate_test": {
+      "queries": 50,
+      "threshold": 0.6841380000114441,
+      "decision_flips": 8,
+      "top1_flips": 39,
+      "score_shift_mean_abs": 0.0491170734167099,
+      "closest_margin_to_threshold": 0.0044092535972595215
+    }
+  },
+  "trt_int8_minmax_day": {
+    "cosine": {
+      "mean": 0.8985627293586731,
+      "min": 0.7609422206878662,
+      "p01": 0.8112691640853882,
+      "one_minus_mean": 0.1014372706413269
+    },
+    "retrieval_all": {
+      "queries": 200,
+      "top1_flips": 84,
+      "score_shift_mean_abs": 0.016479216516017914,
+      "score_shift_max_abs": 0.12098318338394165
+    },
+    "frozen_gate_test": {
+      "queries": 50,
+      "threshold": 0.6841380000114441,
+      "decision_flips": 5,
+      "top1_flips": 16,
+      "score_shift_mean_abs": 0.025429382920265198,
+      "closest_margin_to_threshold": 0.0044092535972595215
+    }
+  },
+  "trt_int8_entropy_night": {
+    "cosine": {
+      "mean": 0.7142323851585388,
+      "min": 0.4056275188922882,
+      "p01": 0.48936185240745544,
+      "one_minus_mean": 0.2857676148414612
+    },
+    "retrieval_all": {
+      "queries": 200,
+      "top1_flips": 147,
+      "score_shift_mean_abs": 0.029464371502399445,
+      "score_shift_max_abs": 0.20411807298660278
+    },
+    "frozen_gate_test": {
+      "queries": 50,
+      "threshold": 0.6841380000114441,
+      "decision_flips": 7,
+      "top1_flips": 41,
+      "score_shift_mean_abs": 0.04500935599207878,
+      "closest_margin_to_threshold": 0.0044092535972595215
+    }
+  }
+}

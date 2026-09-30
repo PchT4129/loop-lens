@@ -1,0 +1,86 @@
+{
+  "b1": {
+    "batch": 1,
+    "res": 224,
+    "path": "deploy/results/engines/vits14_mean_224_b1_fp32.onnx",
+    "exporter": "dynamo",
+    "export_s": 2.7,
+    "opset": 20,
+    "n_nodes": 432,
+    "op_histogram": {
+      "Add": 73,
+      "MatMul": 72,
+      "Transpose": 61,
+      "Reshape": 49,
+      "Mul": 48,
+      "Slice": 37,
+      "Squeeze": 36,
+      "LayerNormalization": 25,
+      "Softmax": 12,
+      "Gelu": 12,
+      "Conv": 1,
+      "Concat": 1,
+      "ReduceMean": 1,
+      "ReduceL2": 1,
+      "Clip": 1,
+      "Expand": 1,
+      "Div": 1
+    },
+    "attention_kept_whole": false,
+    "size_mb": 83.2,
+    "io_shapes": {
+      "images": [
+        1,
+        3,
+        224,
+        224
+      ],
+      "descriptors": [
+        1,
+        384
+      ]
+    }
+  },
+  "b32": {
+    "batch": 32,
+    "res": 224,
+    "path": "deploy/results/engines/vits14_mean_224_b32_fp32.onnx",
+    "exporter": "dynamo",
+    "export_s": 2.0,
+    "opset": 20,
+    "n_nodes": 432,
+    "op_histogram": {
+      "Add": 73,
+      "MatMul": 72,
+      "Transpose": 61,
+      "Reshape": 49,
+      "Mul": 48,
+      "Slice": 37,
+      "Squeeze": 36,
+      "LayerNormalization": 25,
+      "Softmax": 12,
+      "Gelu": 12,
+      "Conv": 1,
+      "Concat": 1,
+      "ReduceMean": 1,
+      "ReduceL2": 1,
+      "Clip": 1,
+      "Expand": 1,
+      "Div": 1
+    },
+    "attention_kept_whole": false,
+    "size_mb": 83.2,
+    "io_shapes": {
+      "images": [
+        32,
+        3,
+        224,
+        224
+      ],
+      "descriptors": [
+        32,
+        384
+      ]
+    }
+  }
+}

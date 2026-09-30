@@ -1,0 +1,98 @@
+{
+  "latency": [
+    {
+      "batch": 1,
+      "a": "compile-RO-fp16",
+      "b": "trt-fp16",
+      "a_median_ms": 0.8507,
+      "b_median_ms": 0.8721,
+      "paired_diff_median_ms": -0.0204,
+      "paired_diff_iqr_ms": [
+        -0.0259,
+        -0.0067
+      ],
+      "rounds_b_faster": 1,
+      "rounds": 10,
+      "speedup_b_over_a": 0.975
+    },
+    {
+      "batch": 1,
+      "a": "trt-fp16",
+      "b": "trt-fp16+cudagraph",
+      "a_median_ms": 0.8601,
+      "b_median_ms": 0.5026,
+      "paired_diff_median_ms": 0.3566,
+      "paired_diff_iqr_ms": [
+        0.3492,
+        0.361
+      ],
+      "rounds_b_faster": 10,
+      "rounds": 10,
+      "speedup_b_over_a": 1.711
+    },
+    {
+      "batch": 1,
+      "a": "compile-RO-fp16",
+      "b": "trt-fp16+cudagraph",
+      "a_median_ms": 0.8937,
+      "b_median_ms": 0.5269,
+      "paired_diff_median_ms": 0.3664,
+      "paired_diff_iqr_ms": [
+        0.3582,
+        0.3699
+      ],
+      "rounds_b_faster": 10,
+      "rounds": 10,
+      "speedup_b_over_a": 1.696
+    },
+    {
+      "batch": 32,
+      "a": "compile-RO-fp16",
+      "b": "trt-fp16",
+      "a_median_ms": 11.5349,
+      "b_median_ms": 7.8668,
+      "paired_diff_median_ms": 3.5782,
+      "paired_diff_iqr_ms": [
+        3.4905,
+        3.8209
+      ],
+      "rounds_b_faster": 6,
+      "rounds": 6,
+      "speedup_b_over_a": 1.466
+    }
+  ],
+  "stability": [
+    {
+      "variant": "compile-RO-fp16",
+      "p50_ms": 0.894,
+      "p99_ms": 1.3739,
+      "p99_over_p50": 1.537
+    },
+    {
+      "variant": "trt-fp16",
+      "p50_ms": 0.8983,
+      "p99_ms": 1.3061,
+      "p99_over_p50": 1.454
+    },
+    {
+      "variant": "trt-fp16+cudagraph",
+      "p50_ms": 0.5113,
+      "p99_ms": 0.8778,
+      "p99_over_p50": 1.717
+    }
+  ],
+  "profile": [
+    {
+      "batch": 1,
+      "variant": "compile-RO-fp16",
+      "kernels_per_forward": 116.0,
+      "kernel_ms_per_forward": 0.9193
+    },
+    {
+      "batch": 1,
+      "variant": "trt-fp16",
+      "kernels_per_forward": 91.0,
+      "kernel_ms_per_forward": 0.5804
+    }
+  ]
+}

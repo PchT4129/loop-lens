@@ -1,8 +1,9 @@
 # Inference Profiling and Deployment of the DINOv2 VPR Front End
 
 > **Status: in progress.** Stages 0–3 (environment, machine limits, baseline,
-> profiling) are complete. Stage 4 — the optimisation ladder
-> (`torch.compile` → ONNX → TensorRT FP16 → INT8) and its accuracy cost — is next.
+> profiling) and the optimisation ladder up to INT8 (`torch.compile` → ONNX →
+> TensorRT FP16 → TensorRT INT8) are complete. Per-layer quantisation sensitivity
+> with explicit Q/DQ (stage 5) is next.
 > The experiment ledger [`EXPERIMENTS.md`](EXPERIMENTS.md) is written in Chinese,
 > following the repository's convention for analysis documents.
 
@@ -20,6 +21,20 @@ Accuracy is always measured with the repository's own frozen-gate protocol
 (`src/evaluate.py`, unchanged), never with a new metric.
 
 ## Findings so far
+
+**Headline: the knee lies between FP16 and whole-model INT8.**
+
+| Variant (224 px) | batch 1 | batch 32 | Process VRAM | Held-out R@1 | Deployed F1 [95% CI] |
+| --- | ---: | ---: | ---: | ---: | --- |
+| FP32 eager (reference) | 3.4 ms | 45 ms | 162 MB | 0.933 | 0.848 [0.747, 0.926] |
+| FP16 + `torch.compile` (CUDA Graph) | 0.86 ms | 11.5 ms | 142 MB | 0.933 | 0.848 (bit-identical) |
+| **FP16 TensorRT + CUDA Graph** | **0.51 ms** | **7.6–7.9 ms** | 106–118 MB | **0.933** | **0.848** (bit-identical) |
+| INT8 TensorRT (implicit PTQ) + CUDA Graph | 0.47 ms | 6.9 ms | 98 MB | 0.633 | 0.667 [0.533, 0.791] |
+
+FP16 TensorRT is 6.6× faster than FP32 at batch 1 with no measurable accuracy
+cost. INT8 buys another 8% and 20 MB, and gives back all of DINOv2's advantage:
+held-out Recall@1 falls to the fine-tuned ResNet18's level and false positives
+double.
 
 **1. Batch 1 is CPU-launch-bound, so lower precision barely helps latency.**
 ViT-S/14 issues 154–178 kernels per forward. At BF16 batch 1 the GPU is busy only
@@ -69,10 +84,39 @@ a single `.contiguous()` recovers most of it.
   truncated timeline window, a single A/B/A that reversed a sign) are documented in
   the ledger together with how they were caught.
 
+**5. Batch 1 stays launch-bound even under TensorRT.**
+`torch.compile` with CUDA Graphs brings FP16 batch 1 from ~2.3 ms to 0.86 ms —
+exactly the 0.89 ms of GPU work the profiler measured, as predicted. TensorRT
+then cuts the GPU work itself by 37% (it re-fuses the attention that the ONNX
+export had split into MatMul/Softmax/MatMul, and times kernels for the exact
+shapes), but on its own its wall clock is unchanged at 0.87 ms: its C++ launches
+still cannot keep the GPU fed. Only TensorRT inside a CUDA Graph reaches 0.51 ms.
+At batch 32, where the GPU is saturated, TensorRT is 1.47× faster than
+`torch.compile`.
+
+**6. BF16 loses to FP16 on this model — on both axes.** Task metrics are identical,
+but BF16 features deviate 62× more from FP32 than FP16 features do (theory from the
+mantissa widths: 64×), and BF16 is not faster in the model. BF16's wider exponent
+buys nothing here because FP16 never overflows.
+
+**7. INT8 fails because of a few outlier channels.** With TensorRT's implicit INT8
+and post-training calibration (entropy, 50 `day_right` frames disjoint from the
+test segment), mean feature cosine to FP32 drops to 0.74 and the maximum score shift
+is 50× the gate's decision margin. The calibration cache itself is sane (input
+range decodes to ImageNet-normalised pixels), and it matches per-layer maxima
+measured independently in PyTorch. The cause: a few fixed channels in DINOv2's
+LayerNorm outputs carry activations up to 19× the typical channel maximum.
+Per-tensor INT8 either clips them (entropy) or coarsens everything else (min-max).
+Fake-quantising only the LayerNorm outputs in PyTorch, with TensorRT's own scales,
+reproduces entropy being an order of magnitude worse than min-max. That ordering
+is the reverse of what I predicted before measuring.
+
 **Accuracy reference.** FP32 features extracted through the repository's own entry
 point reproduce the README bit-for-bit: deployed F1 **0.848 [0.747, 0.926]**, oracle
 best F1 0.874. The frozen gate fitted here is the one every lower-precision variant
-will be evaluated against.
+is evaluated against; applying it to another runtime's features uses
+`src/evaluate.py --allow-runtime-mismatch`, which relaxes only the recorded
+runtime and nothing else.
 
 ## Layout
 
@@ -80,9 +124,12 @@ will be evaluated against.
 deploy/
   EXPERIMENTS.md        experiment ledger: expectation → measurement → explanation
   env/                  check_env.py (self-checks, incl. VRAM-spill probe), requirements
-  bench/                timing.py (CUDA-event timer), machine limits, roofline, baseline sweep
+  bench/                timing.py (CUDA-event timer), machine limits, roofline, baseline sweep,
+                        torch.compile / TensorRT / INT8 latency, isolated-process memory
   export/wrapper.py     VPRDescriptor: baked pos-embed, tensor in/out, equivalence gate
-  eval/run_protocol.sh  runs src/evaluate.py's frozen-gate protocol on any feature set
+  export/               ONNX export, TensorRT engine build (FP32/FP16/INT8), INT8 calibrator, runner
+  eval/                 runtime registry, feature extraction per runtime, feature-level comparison,
+                        run_protocol.sh (src/evaluate.py's frozen-gate protocol on any feature set)
   profile/              torch.profiler analysis, timelines, CPU-affinity experiments
   diagnostics/          one script per ledger claim (layout, spill, clock, kernels, sampler)
   results/              JSON / CSV / PNG evidence (engines, ONNX, .pt are gitignored)
@@ -111,7 +158,25 @@ bash deploy/eval/run_protocol.sh ref_fp32 deploy/results/ref/fp32_database.pt de
 # stage 3: profiling and diagnostics
 python -m deploy.profile.profile_torch
 python -m deploy.diagnostics.bicubic_layout    # the 7.8x layout effect
+
+# stage 4a: half precision and torch.compile
+python -m deploy.eval.runtimes extract torch-fp16 torch-bf16 compile-reduce-overhead-fp16
+python -m deploy.bench.bench_compile && python -m deploy.bench.memory_isolated
+
+# stage 4b: ONNX -> TensorRT FP16 (one command, stops at the first failure)
+bash deploy/run_stage4b.sh
+
+# stage 4c: TensorRT INT8
+python -m deploy.export.to_trt --precision int8 --calib-algo entropy --calib-split day --batch 1 32 \
+  --out deploy/results/trt_build_int8_entropy_day.json
+python -m deploy.eval.runtimes extract trt-int8-entropy-day
+python -m deploy.eval.compare_features deploy/results/runtime/trt_int8_entropy_day
+python -u -m deploy.bench.bench_int8
+python -m deploy.diagnostics.activation_outliers   # the outlier-channel mechanism
 ```
+
+Every variant's accuracy goes through the same frozen-gate protocol:
+`bash deploy/eval/run_protocol.sh <tag> <db.pt> <query.pt> deploy/results/protocol/ref_fp32/gate_similarity.json`.
 
 Hardware used: RTX 5070 Ti Laptop (Blackwell, sm_120, 12 GB), WSL2, PyTorch
 2.11+cu128, TensorRT 10.16 (cu12). All numbers were measured on this machine,

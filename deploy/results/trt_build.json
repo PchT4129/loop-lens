@@ -1,0 +1,176 @@
+{
+  "fp32_b1": {
+    "engine_layers": 128,
+    "layer_types": {
+      "gemm": 72,
+      "kgen": 53,
+      "custom_layer": 2,
+      "correlation": 1
+    },
+    "myelin_layers": 0,
+    "attention_like_layers": 12,
+    "example_layer_names": [
+      "__mye106076_myl0_0",
+      "node_conv2d_myl0_1",
+      "__myl_Tran_myl0_2",
+      "__myl_ConcAddMeanSubMulMeanAddSqrtDivMulMulAdd_myl0_3",
+      "__mye100978+__mye100966+__mye100954_myl0_4",
+      "node_MatMul_60_myl0_5",
+      "__myl_MaxrSubExpSumDivMul_myl0_6",
+      "node_scaled_dot_product_attention_myl0_7",
+      "node_MatMul_68_myl0_8",
+      "__myl_MulAddMeanSubMulMeanAddSqrtDivMulMulAdd_myl0_9",
+      "node_MatMul_70_myl0_10",
+      "__myl_DivErfAddMulMul_myl0_11"
+    ],
+    "top_tactics": {
+      "sm80_xmma_gemm_f32f32_f32f32_f32_nn_n_tilesize64x64x8_stage3_warpsize1x4x1_ffma_aligna4_alignc4": 36,
+      "__myl_MulAddMeanSubMulMeanAddSqrtDivMulMulAdd_0x3c11c227dbc21d731fdff27acb76880a": 23,
+      "sm80_xmma_gemm_f32f32_f32f32_f32_nn_n_tilesize64x128x8_stage3_warpsize1x4x1_ffma_aligna4_alignc4": 12,
+      "sm80_xmma_gemm_f32f32_f32f32_f32_tn_n_tilesize64x128x8_stage3_warpsize1x4x1_ffma_aligna4_alignc4": 12,
+      "__myl_MaxrSubExpSumDivMul_0x934b105c5c27d01caf69ec98dc9ed69f": 12,
+      "sm80_xmma_gemm_f32f32_f32f32_f32_nn_n_tilesize32x32x8_stage3_warpsize1x2x1_ffma_aligna4_alignc4": 12,
+      "__myl_DivErfAddMulMul_0x9d158e3a4b6b1ecdf220221c74d9e575": 12,
+      "?": 2
+    },
+    "device_memory_mb": 5.7,
+    "precision": "fp32",
+    "onnx": "vits14_mean_224_b1_fp32.onnx",
+    "engine": "vits14_mean_224_b1_fp32.engine",
+    "build_s": 22.8,
+    "engine_mb": 83.5,
+    "network_layers_before_opt": 1706,
+    "trt_version": "10.16.1.11"
+  },
+  "fp16_b1": {
+    "engine_layers": 92,
+    "layer_types": {
+      "kgen": 41,
+      "gemm": 36,
+      "fusion": 12,
+      "custom_layer": 2,
+      "correlation": 1
+    },
+    "myelin_layers": 0,
+    "attention_like_layers": 12,
+    "example_layer_names": [
+      "__mye198439_myl0_0",
+      "__myl_CastConc_myl0_1",
+      "node_conv2d_myl0_2",
+      "__myl_TranConcAddCastMeanSubMulMeanAddSqrtDivMulCastMulAdd_myl0_3",
+      "__mye193795+__mye193783+__mye193771_myl0_4",
+      "_gemm_mha_v2_myl0_5",
+      "node_MatMul_68_myl0_6",
+      "__myl_MulAddCastMeanSubMulMeanAddSqrtDivMulCastMulAdd_myl0_7",
+      "__myl_Fc_myl0_8",
+      "node_MatMul_72_myl0_9",
+      "__myl_MulAddCastMeanSubMulMeanAddSqrtDivMulCastMulAdd_myl0_10",
+      "__mye193889+__mye193877+__mye193865_myl0_11"
+    ],
+    "top_tactics": {
+      "sm80_xmma_gemm_f16f16_f16f16_f16_tn_n_tilesize64x64x64_stage4_warpsize2x2x1_tensor16x8x16": 24,
+      "__myl_MulAddCastMeanSubMulMeanAddSqrtDivMulCastMulAdd_0x2d08e1ee64e04468271da98ce67e7945": 23,
+      "_gemm_mha_v2_0xafd543db270c02f53aa011e3758a26ac": 12,
+      "sm80_xmma_gemm_f16f16_f16f16_f16_nn_n_tilesize128x128x32_stage4_warpsize2x2x1_tensor16x8x16_by_fusion_tactic": 12,
+      "sm80_xmma_gemm_f16f16_f16f16_f16_nn_n_tilesize64x64x64_stage4_warpsize2x2x1_tensor16x8x16": 12,
+      "?": 2,
+      "__myl_CastConc_0xdaa954dc95381d64c62525f1ecf05d2c": 1,
+      "sm80_xmma_fprop_implicit_gemm_indexed_wo_smem_f16f16_f16f16_f16_nhwckrsc_nhwc_tilesize128x32x64_stage1_warpsize4x1x1_g1_tensor16x8x16_aligna4_alignc8": 1
+    },
+    "device_memory_mb": 1.5,
+    "precision": "fp16",
+    "onnx": "vits14_mean_224_b1_fp32.onnx",
+    "engine": "vits14_mean_224_b1_fp16.engine",
+    "build_s": 12.2,
+    "engine_mb": 44.2,
+    "network_layers_before_opt": 1706,
+    "trt_version": "10.16.1.11"
+  },
+  "fp32_b32": {
+    "engine_layers": 129,
+    "layer_types": {
+      "gemm": 72,
+      "kgen": 54,
+      "custom_layer": 2,
+      "correlation": 1
+    },
+    "myelin_layers": 0,
+    "attention_like_layers": 12,
+    "example_layer_names": [
+      "__mye108501_myl0_0",
+      "node_conv2d_myl0_1",
+      "__myl_Tran_myl0_2",
+      "__myl_ConcAddMeanSubMulMean_myl0_3",
+      "__myl_AddSqrtDivMulMulAddReshReshTran_myl0_4",
+      "__mye101541+__mye101529+__mye101517_myl0_5",
+      "node_MatMul_60_myl0_6",
+      "__myl_MaxrSubExpSumDivMul_myl0_7",
+      "node_scaled_dot_product_attention_myl0_8",
+      "node_MatMul_68_myl0_9",
+      "__myl_MulReshReshTranReshAddMeanSubMulMeanAddSqrtDivMulMulAdd_myl0_10",
+      "node_MatMul_70_myl0_11"
+    ],
+    "top_tactics": {
+      "sm80_xmma_gemm_f32f32_f32f32_f32_nn_n_tilesize64x128x8_stage3_warpsize1x4x1_ffma_aligna4_alignc4": 36,
+      "__myl_MulAddMeanSubMulMeanAddSqrtDivMulMulAdd_0x6664d11e2c3a5c3615bbe853cb1096e9": 22,
+      "sm80_xmma_gemm_f32f32_f32f32_f32_tn_n_tilesize64x64x8_stage3_warpsize1x4x1_ffma_aligna4_alignc4": 12,
+      "__myl_MaxrSubExpSumDivMul_0x3bf3b79f10a94ba399910135624a8fed": 12,
+      "sm80_xmma_gemm_f32f32_f32f32_f32_nn_n_tilesize64x64x8_stage3_warpsize1x4x1_ffma_aligna4_alignc4": 12,
+      "sm80_xmma_gemm_f32f32_f32f32_f32_nn_n_tilesize64x256x8_stage3_warpsize1x4x1_ffma_aligna4_alignc4": 12,
+      "__myl_DivErfAddMulMul_0x4ab8588237eaa7eb55d128fc1db60d7e": 12,
+      "?": 2
+    },
+    "device_memory_mb": 181.1,
+    "precision": "fp32",
+    "onnx": "vits14_mean_224_b32_fp32.onnx",
+    "engine": "vits14_mean_224_b32_fp32.engine",
+    "build_s": 5.2,
+    "engine_mb": 83.5,
+    "network_layers_before_opt": 1706,
+    "trt_version": "10.16.1.11"
+  },
+  "fp16_b32": {
+    "engine_layers": 93,
+    "layer_types": {
+      "kgen": 42,
+      "gemm": 36,
+      "fusion": 12,
+      "custom_layer": 2,
+      "correlation": 1
+    },
+    "myelin_layers": 0,
+    "attention_like_layers": 12,
+    "example_layer_names": [
+      "__mye200871_myl0_0",
+      "__myl_CastConc_myl0_1",
+      "node_conv2d_myl0_2",
+      "__myl_TranConcAddCastMeanSubMulMean_myl0_3",
+      "__myl_AddSqrtDivMulCastMulAddReshReshTran_myl0_4",
+      "__mye194358+__mye194346+__mye194334_myl0_5",
+      "_gemm_mha_v2_myl0_6",
+      "node_MatMul_68_myl0_7",
+      "__myl_MulReshReshTranReshAddCastMeanSubMulMeanAddSqrtDivMulCastMulAdd_myl0_8",
+      "__myl_Fc_myl0_9",
+      "node_MatMul_72_myl0_10",
+      "__myl_MulAddCastMeanSubMulMeanAddSqrtDivMulCastMulAdd_myl0_11"
+    ],
+    "top_tactics": {
+      "__myl_MulAddCastMeanSubMulMeanAddSqrtDivMulCastMulAdd_0x422d54c23a187ab98b1f081d5d0375c2": 22,
+      "sm80_xmma_gemm_f16f16_f16f16_f16_nn_n_tilesize256x128x32_stage3_warpsize4x2x1_tensor16x8x16": 12,
+      "_gemm_mha_v2_0x7bdda91f00324709aff6c19e22107cd6": 12,
+      "sm80_xmma_gemm_f16f16_f16f16_f16_tn_n_tilesize128x128x32_stage4_warpsize2x2x1_tensor16x8x16": 12,
+      "sm80_xmma_gemm_f16f16_f16f16_f16_nn_n_tilesize256x128x32_stage3_warpsize4x2x1_tensor16x8x16_by_fusion_tactic": 12,
+      "sm80_xmma_gemm_f16f16_f16f16_f16_nn_n_tilesize128x64x32_stage5_warpsize2x2x1_tensor16x8x16": 12,
+      "?": 2,
+      "__myl_CastConc_0xe69c79c18bf3c182d2ecee23bf658b74": 1
+    },
+    "device_memory_mb": 48.2,
+    "precision": "fp16",
+    "onnx": "vits14_mean_224_b32_fp32.onnx",
+    "engine": "vits14_mean_224_b32_fp16.engine",
+    "build_s": 11.2,
+    "engine_mb": 47.2,
+    "network_layers_before_opt": 1706,
+    "trt_version": "10.16.1.11"
+  }
+}

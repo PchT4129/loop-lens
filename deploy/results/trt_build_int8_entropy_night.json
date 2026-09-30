@@ -1,0 +1,87 @@
+{
+  "int8_entropy_night_b1": {
+    "engine_layers": 94,
+    "layer_types": {
+      "kgen": 43,
+      "gemm": 24,
+      "fusion": 24,
+      "custom_layer": 2,
+      "correlation": 1
+    },
+    "myelin_layers": 94,
+    "attention_like_layers": 12,
+    "example_layer_names": [
+      "__mye210470_myl0_0",
+      "__myl_MulMinMaxRounConc_myl0_1",
+      "__myl_MoveCast_myl0_2",
+      "node_conv2d_myl0_3",
+      "__myl_TranResh_myl0_4",
+      "__myl_TranConcAddCastMeanSubMulMeanAddSqrtDivMulCastMulAddCastMulMinMaxRounCast_myl0_5",
+      "__mye198380+__mye198368+__mye198356_myl0_6",
+      "_gemm_mha_v2_myl0_7",
+      "__myl_FcCastAddMulAdd_myl0_8",
+      "__myl_CastMeanSubMulMeanAddSqrtDivMulCastMulAddCastMulMinMaxRounCast_myl0_9",
+      "node_MatMul_70_myl0_10",
+      "__myl_FcCastAddMulAdd_myl0_11"
+    ],
+    "top_tactics": {
+      "__myl_CastMeanSubMulMeanAddSqrtDivMulCastMulAddCastMulMinMaxRounCast_0x3a9e6c38a66859f8364e8b722886cc15": 23,
+      "sm80_xmma_gemm_i8i8_i8i32_f32_tn_n_tilesize256x64x64_stage3_warpsize4x1x1_tensor16x8x32": 12,
+      "sm80_xmma_gemm_i8i8_i8i32_f32_tn_n_tilesize128x128x64_stage3_warpsize2x2x1_tensor16x8x32_by_fusion_tactic": 12,
+      "sm80_xmma_gemm_i8i8_i8i32_f32_tn_n_tilesize128x64x64_stage3_warpsize2x2x1_tensor16x8x32_gelu_erf": 12,
+      "sm80_xmma_gemm_i8f32_i8i32_f32_tn_n_tilesize32x64x64_stage6_warpsize2x2x1_tensor16x8x32_by_fusion_tactic": 12,
+      "?": 2,
+      "__myl_MulMinMaxRounConc_0xc4872d0a24f5f40dc427015ffc100bae": 1,
+      "__myl_MoveCast_0x1d7ed6b3659698e3d96feda5a93b507f": 1
+    },
+    "layers_with_int8_input": 63,
+    "int8_layers_by_type": {
+      "custom_layer": 2,
+      "correlation": 1,
+      "gemm": 24,
+      "kgen": 12,
+      "fusion": 24
+    },
+    "gemm_layers_by_input_type": {
+      "Int8": 24
+    },
+    "mha_layers_by_input_type": {
+      "Int8": 12
+    },
+    "int8_layer_examples": [
+      {
+        "name": "__mye210470_myl0_0",
+        "onnx": ""
+      },
+      {
+        "name": "node_conv2d_myl0_3",
+        "onnx": "[ONNX Layer: node_conv2d]"
+      },
+      {
+        "name": "__mye198380+__mye198368+__mye198356_myl0_6",
+        "onnx": "[ONNX Layer: node_MatMul_11]\u001f[ONNX Layer: node_linear]"
+      },
+      {
+        "name": "_gemm_mha_v2_myl0_7",
+        "onnx": "[ONNX Layer: node_MatMul_60]\u001f[ONNX Layer: node_scaled_dot_product_attention]\u001f[ONNX Layer: node_Softmax_61]"
+      },
+      {
+        "name": "__myl_FcCastAddMulAdd_myl0_8",
+        "onnx": "[ONNX Layer: node_MatMul_68]\u001f[ONNX Layer: node_linear_1]\u001f[ONNX Layer: node_mul]\u001f[ONNX Layer: node_add_1]"
+      },
+      {
+        "name": "node_MatMul_70_myl0_10",
+        "onnx": "[ONNX Layer: node_MatMul_70]\u001f[ONNX Layer: node_gelu]\u001f[ONNX Layer: node_linear_2]"
+      }
+    ],
+    "device_memory_mb": 7.7,
+    "precision": "int8",
+    "onnx": "vits14_mean_224_b1_fp32.onnx",
+    "engine": "vits14_mean_224_b1_int8_entropy_night.engine",
+    "build_s": 98.0,
+    "engine_mb": 32.7,
+    "network_layers_before_opt": 1706,
+    "trt_version": "10.16.1.11",
+    "tag": "int8_entropy_night"
+  }
+}

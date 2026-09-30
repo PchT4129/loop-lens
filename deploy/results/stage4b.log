@@ -1,0 +1,84 @@
+########## 1/7 导出 ONNX（batch 1 与 32） ##########
+[torch.onnx] Obtain model graph for `VPRDescriptor([...]` with `torch.export.export(..., strict=False)`...
+[torch.onnx] Obtain model graph for `VPRDescriptor([...]` with `torch.export.export(..., strict=False)`... ✅
+[torch.onnx] Run decompositions...
+[torch.onnx] Run decompositions... ✅
+[torch.onnx] Translate the graph into ONNX...
+[torch.onnx] Translate the graph into ONNX... ✅
+[torch.onnx] Optimize the ONNX graph...
+[torch.onnx] Optimize the ONNX graph... ✅
+batch 1: 导出器 dynamo | opset 20 | 432 个节点 | 83.2 MB | 耗时 2.7 s | 输入输出 {'images': [1, 3, 224, 224], 'descriptors': [1, 384]}
+   注意力保留为整体算子: False
+   算子分布: {'Add': 73, 'MatMul': 72, 'Transpose': 61, 'Reshape': 49, 'Mul': 48, 'Slice': 37, 'Squeeze': 36, 'LayerNormalization': 25, 'Softmax': 12, 'Gelu': 12, 'Conv': 1, 'Concat': 1, 'ReduceMean': 1, 'ReduceL2': 1, 'Clip': 1, 'Expand': 1, 'Div': 1}
+[torch.onnx] Obtain model graph for `VPRDescriptor([...]` with `torch.export.export(..., strict=False)`...
+[torch.onnx] Obtain model graph for `VPRDescriptor([...]` with `torch.export.export(..., strict=False)`... ✅
+[torch.onnx] Run decompositions...
+[torch.onnx] Run decompositions... ✅
+[torch.onnx] Translate the graph into ONNX...
+[torch.onnx] Translate the graph into ONNX... ✅
+[torch.onnx] Optimize the ONNX graph...
+[torch.onnx] Optimize the ONNX graph... ✅
+batch 32: 导出器 dynamo | opset 20 | 432 个节点 | 83.2 MB | 耗时 2.0 s | 输入输出 {'images': [32, 3, 224, 224], 'descriptors': [32, 384]}
+   注意力保留为整体算子: False
+   算子分布: {'Add': 73, 'MatMul': 72, 'Transpose': 61, 'Reshape': 49, 'Mul': 48, 'Slice': 37, 'Squeeze': 36, 'LayerNormalization': 25, 'Softmax': 12, 'Gelu': 12, 'Conv': 1, 'Concat': 1, 'ReduceMean': 1, 'ReduceL2': 1, 'Clip': 1, 'Expand': 1, 'Div': 1}
+已写入 deploy/results/onnx_export.json
+########## 2/7 构建 TensorRT 引擎（FP32 / FP16 × batch 1 / 32） ##########
+deploy/export/to_trt.py:92: DeprecationWarning: Use Deprecated in TensorRT 10.1. Superseded by get_device_memory_size_v2 instead.
+  getattr(engine, "device_memory_size", 0)) / 2**20, 1),
+WARNING: in op node_clamp_min_min, operand node_clamp_min_beta payload type requires precision-lose casting
+WARNING: in op node_clamp_min_min, operand node_clamp_min_beta payload type requires precision-lose casting
+fp32 b1: 构建 22.8 s | 引擎 83.5 MB | ONNX 层 1706 → 引擎层 128 | Myelin 层 0 | 注意力类层 12 | 运行时显存 5.7 MB
+   层类型: {'gemm': 72, 'kgen': 53, 'custom_layer': 2, 'correlation': 1}
+   前几层: ['__mye106076_myl0_0', 'node_conv2d_myl0_1', '__myl_Tran_myl0_2', '__myl_ConcAddMeanSubMulMeanAddSqrtDivMulMulAdd_myl0_3', '__mye100978+__mye100966+__mye100954_myl0_4', 'node_MatMul_60_myl0_5']
+fp16 b1: 构建 12.2 s | 引擎 44.2 MB | ONNX 层 1706 → 引擎层 92 | Myelin 层 0 | 注意力类层 12 | 运行时显存 1.5 MB
+   层类型: {'kgen': 41, 'gemm': 36, 'fusion': 12, 'custom_layer': 2, 'correlation': 1}
+   前几层: ['__mye198439_myl0_0', '__myl_CastConc_myl0_1', 'node_conv2d_myl0_2', '__myl_TranConcAddCastMeanSubMulMeanAddSqrtDivMulCastMulAdd_myl0_3', '__mye193795+__mye193783+__mye193771_myl0_4', '_gemm_mha_v2_myl0_5']
+fp32 b32: 构建 5.2 s | 引擎 83.5 MB | ONNX 层 1706 → 引擎层 129 | Myelin 层 0 | 注意力类层 12 | 运行时显存 181.1 MB
+   层类型: {'gemm': 72, 'kgen': 54, 'custom_layer': 2, 'correlation': 1}
+   前几层: ['__mye108501_myl0_0', 'node_conv2d_myl0_1', '__myl_Tran_myl0_2', '__myl_ConcAddMeanSubMulMean_myl0_3', '__myl_AddSqrtDivMulMulAddReshReshTran_myl0_4', '__mye101541+__mye101529+__mye101517_myl0_5']
+fp16 b32: 构建 11.2 s | 引擎 47.2 MB | ONNX 层 1706 → 引擎层 93 | Myelin 层 0 | 注意力类层 12 | 运行时显存 48.2 MB
+   层类型: {'kgen': 42, 'gemm': 36, 'fusion': 12, 'custom_layer': 2, 'correlation': 1}
+   前几层: ['__mye200871_myl0_0', '__myl_CastConc_myl0_1', 'node_conv2d_myl0_2', '__myl_TranConcAddCastMeanSubMulMean_myl0_3', '__myl_AddSqrtDivMulCastMulAddReshReshTran_myl0_4', '__mye194358+__mye194346+__mye194334_myl0_5']
+已写入 deploy/results/trt_build.json
+########## 3/7 用 TRT 引擎抽特征（batch 1） ##########
+[09/28/2026-15:40:15] [TRT] [W] Using default stream in enqueueV3() may lead to performance issues due to additional calls to cudaStreamSynchronize() by TensorRT to ensure correct synchronization. Please use non-default stream instead.
+trt-fp32                          → deploy/results/runtime/trt_fp32_*.pt
+[09/28/2026-15:40:17] [TRT] [W] Using default stream in enqueueV3() may lead to performance issues due to additional calls to cudaStreamSynchronize() by TensorRT to ensure correct synchronization. Please use non-default stream instead.
+trt-fp16                          → deploy/results/runtime/trt_fp16_*.pt
+########## 4/7 特征级对比：相对 FP32 参考；以及 TRT FP32 相对 PyTorch FP32（导出正确性核对） ##########
+trt_fp32               余弦 均值 1-0.0e+00 最小 1.000000 | top-1 翻转 0/200 分数漂移 均 1.6e-07 最大 7.2e-07 | 门控测试段 决策翻转 0/50
+trt_fp16               余弦 均值 1-1.2e-05 最小 0.999949 | top-1 翻转 2/200 分数漂移 均 3.4e-04 最大 1.5e-03 | 门控测试段 决策翻转 0/50
+已写入 deploy/results/compare_r4.json
+trt_fp32               余弦 均值 1-0.0e+00 最小 1.000000 | top-1 翻转 0/200 分数漂移 均 1.5e-07 最大 6.0e-07 | 门控测试段 决策翻转 0/50
+########## 5/7 VPR 协议（冻结 FP32 门控） ##########
+== trt_fp32 ==
+recall@1: 0.9333 recall@5: 0.9667 oracle/open_set/best_f1: 0.8743 oracle/open_set/recall@100%precision: 0.2326 
+deployed/open_set/f1: 0.8478 deployed/open_set/FP: 7.0000 deployed/open_set/f1/ci95_low: 0.7473 deployed/open_set/f1/ci95_high: 0.9263 
+== trt_fp16 ==
+recall@1: 0.9333 recall@5: 0.9667 oracle/open_set/best_f1: 0.8743 oracle/open_set/recall@100%precision: 0.2326 
+deployed/open_set/f1: 0.8478 deployed/open_set/FP: 7.0000 deployed/open_set/f1/ci95_low: 0.7473 deployed/open_set/f1/ci95_high: 0.9263 
+########## 6/7 延迟（配对）、稳定性、剖析 ##########
+  [预热] 显存频率 9001 / 14001 MHz  ⚠️ 未达满频,测量可能偏低
+[09/28/2026-15:40:42] [TRT] [W] Using default stream in enqueueV3() may lead to performance issues due to additional calls to cudaStreamSynchronize() by TensorRT to ensure correct synchronization. Please use non-default stream instead.
+b1   compile-RO FP16    0.923 ms → TRT FP16    1.158 ms  ×0.80（TRT 更快的轮数 1/10）
+b1   TRT FP16    1.118 ms → TRT FP16 + CUDA Graph    0.508 ms  ×2.20（Graph 更快的轮数 10/10）
+b1   剖析 compile-RO-fp16       116 个 kernel / 前向 | GPU 工作量 0.817 ms
+b1   剖析 trt-fp16               91 个 kernel / 前向 | GPU 工作量 0.530 ms
+[09/28/2026-15:40:54] [TRT] [W] WARNING The logger passed into createInferRuntime differs from one already registered for an existing builder, runtime, or refitter. So the current new logger is ignored, and TensorRT will use the existing one which is returned by nvinfer1::getLogger() instead.
+[09/28/2026-15:41:01] [TRT] [W] Using default stream in enqueueV3() may lead to performance issues due to additional calls to cudaStreamSynchronize() by TensorRT to ensure correct synchronization. Please use non-default stream instead.
+b32  compile-RO FP16   11.568 ms → TRT FP16    7.861 ms  ×1.47（TRT 更快的轮数 6/6）
+
+--- b1 稳定性（1000 次迭代）---
+  compile-RO-fp16      p50 11.055 ms | p99 14.762 ms | p99/p50 1.34
+  trt-fp16             p50 7.824 ms | p99 8.540 ms | p99/p50 1.09
+########## 7/7 显存（每个变体独立进程） ##########
+变体                          权重  allocated  reserved  CUDA context       进程总占用
+fp16 eager               41.1M      53.6M     60.0M         -0.0M      108.0M  ✓
+fp16 default             41.1M      53.7M     60.0M         -0.0M      108.0M  ✓
+fp16 reduce-overhead     41.1M      53.7M     82.0M         -0.0M      142.0M  ✓
+fp16 max-autotune        41.1M      88.0M    118.0M         -0.0M      178.0M  ✓
+fp32 eager               82.1M      96.3M    114.0M         -0.0M      162.0M  ✓
+fp32 reduce-overhead     82.1M      94.8M    116.0M         -0.0M      176.0M  ✓
+fp16 trt                (TRT内)       0.6M      2.0M         -0.0M      106.0M  ✓
+fp32 trt                (TRT内)       0.6M      2.0M         -0.0M      108.0M  ✓
+已写入 deploy/results/memory_isolated_r2.json

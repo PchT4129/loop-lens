@@ -1,0 +1,140 @@
+  [预热] 显存频率 14001 / 14001 MHz  ✓ 已满频
+
+--- 延迟：fp16，配对交替 ---
+  fp16 default          b1   编译    6.6 s | eager    2.395 → 编译    1.818 ms  ×1.32  （编译更快的轮数 10/10）
+  fp16 default          b32  编译    5.0 s | eager   13.114 → 编译   11.576 ms  ×1.13  （编译更快的轮数 6/6）
+  fp16 reduce-overhead  b1   编译    4.0 s | eager    2.388 → 编译    0.889 ms  ×2.69  （编译更快的轮数 10/10）
+  fp16 reduce-overhead  b32  编译    3.7 s | eager   13.497 → 编译   11.632 ms  ×1.16  （编译更快的轮数 6/6）
+Autotune Choices Stats:
+{"num_choices": 2, "num_triton_choices": 0, "best_kernel": "bias_addmm", "best_time": 0.020479999482631683}
+AUTOTUNE addmm(257x1536, 257x384, 384x1536)
+strides: [0, 1], [384, 1], [1, 384]
+dtypes: torch.float16, torch.float16, torch.float16
+  bias_addmm 0.0205 ms 100.0% 
+  addmm 0.0218 ms 94.1% 
+SingleProcess AUTOTUNE benchmarking takes 0.0545 seconds and 0.0001 seconds precompiling for 2 choices
+Autotune Choices Stats:
+{"num_choices": 2, "num_triton_choices": 0, "best_kernel": "addmm", "best_time": 0.01616000011563301}
+AUTOTUNE addmm(257x1152, 257x384, 384x1152)
+strides: [0, 1], [384, 1], [1, 384]
+dtypes: torch.float16, torch.float16, torch.float16
+  addmm 0.0162 ms 100.0% 
+  bias_addmm 0.0164 ms 98.6% 
+SingleProcess AUTOTUNE benchmarking takes 0.0532 seconds and 0.0001 seconds precompiling for 2 choices
+Autotune Choices Stats:
+{"num_choices": 2, "num_triton_choices": 0, "best_kernel": "bias_addmm", "best_time": 0.0081599997356534}
+AUTOTUNE addmm(257x384, 257x384, 384x384)
+strides: [0, 1], [384, 1], [1, 384]
+dtypes: torch.float16, torch.float16, torch.float16
+  bias_addmm 0.0082 ms 100.0% 
+  addmm 0.0102 ms 79.9% 
+SingleProcess AUTOTUNE benchmarking takes 0.0541 seconds and 0.0001 seconds precompiling for 2 choices
+Autotune Choices Stats:
+{"num_choices": 2, "num_triton_choices": 0, "best_kernel": "addmm", "best_time": 0.019872000440955162}
+AUTOTUNE addmm(264x384, 264x1536, 1536x384)
+strides: [0, 1], [1536, 1], [1, 1536]
+dtypes: torch.float16, torch.float16, torch.float16
+  addmm 0.0199 ms 100.0% 
+  bias_addmm 0.0280 ms 71.1% 
+SingleProcess AUTOTUNE benchmarking takes 0.0537 seconds and 0.0001 seconds precompiling for 2 choices
+  fp16 max-autotune     b1   编译   13.9 s | eager    2.135 → 编译    0.889 ms  ×2.40  （编译更快的轮数 10/10）
+Autotune Choices Stats:
+{"num_choices": 2, "num_triton_choices": 0, "best_kernel": "bias_addmm", "best_time": 0.14748799800872803}
+AUTOTUNE addmm(8224x1152, 8224x384, 384x1152)
+strides: [0, 1], [384, 1], [1, 384]
+dtypes: torch.float16, torch.float16, torch.float16
+  bias_addmm 0.1475 ms 100.0% 
+  addmm 0.1909 ms 77.2% 
+SingleProcess AUTOTUNE benchmarking takes 0.0825 seconds and 0.0001 seconds precompiling for 2 choices
+Autotune Choices Stats:
+{"num_choices": 2, "num_triton_choices": 0, "best_kernel": "bias_addmm", "best_time": 0.05734400078654289}
+AUTOTUNE addmm(8224x384, 8224x384, 384x384)
+strides: [0, 1], [384, 1], [1, 384]
+dtypes: torch.float16, torch.float16, torch.float16
+  bias_addmm 0.0573 ms 100.0% 
+  addmm 0.0757 ms 75.7% 
+SingleProcess AUTOTUNE benchmarking takes 0.0563 seconds and 0.0001 seconds precompiling for 2 choices
+Autotune Choices Stats:
+{"num_choices": 2, "num_triton_choices": 0, "best_kernel": "bias_addmm", "best_time": 0.20403200387954712}
+AUTOTUNE addmm(8224x1536, 8224x384, 384x1536)
+strides: [0, 1], [384, 1], [1, 384]
+dtypes: torch.float16, torch.float16, torch.float16
+  bias_addmm 0.2040 ms 100.0% 
+  addmm 0.2417 ms 84.4% 
+SingleProcess AUTOTUNE benchmarking takes 0.0923 seconds and 0.0001 seconds precompiling for 2 choices
+Autotune Choices Stats:
+{"num_choices": 2, "num_triton_choices": 0, "best_kernel": "bias_addmm", "best_time": 0.18227200210094452}
+AUTOTUNE addmm(8224x384, 8224x1536, 1536x384)
+strides: [0, 1], [1536, 1], [1, 1536]
+dtypes: torch.float16, torch.float16, torch.float16
+  bias_addmm 0.1823 ms 100.0% 
+  addmm 0.2018 ms 90.3% 
+SingleProcess AUTOTUNE benchmarking takes 0.0743 seconds and 0.0001 seconds precompiling for 2 choices
+  fp16 max-autotune     b32  编译   14.5 s | eager   12.595 → 编译   10.789 ms  ×1.17  （编译更快的轮数 6/6）
+
+--- 延迟：fp32，配对交替 ---
+  fp32 default          b1   编译    4.5 s | eager    3.385 → 编译    3.068 ms  ×1.10  （编译更快的轮数 10/10）
+  fp32 default          b32  编译    5.2 s | eager   45.441 → 编译   45.172 ms  ×1.01  （编译更快的轮数 3/6）
+W0928 14:27:27.118000 246118 site-packages/torch/_dynamo/convert_frame.py:1743] [0/8] torch._dynamo hit config.recompile_limit (8)
+W0928 14:27:27.118000 246118 site-packages/torch/_dynamo/convert_frame.py:1743] [0/8]    function: 'forward' (deploy/export/wrapper.py:87)
+W0928 14:27:27.118000 246118 site-packages/torch/_dynamo/convert_frame.py:1743] [0/8]    last reason: 0/7: tensor 'x' size mismatch at index 0. expected 32, actual 1
+W0928 14:27:27.118000 246118 site-packages/torch/_dynamo/convert_frame.py:1743] [0/8] To log all recompilation reasons, use TORCH_LOGS="recompiles".
+W0928 14:27:27.118000 246118 site-packages/torch/_dynamo/convert_frame.py:1743] [0/8] To diagnose recompilation issues, see https://docs.pytorch.org/docs/main/user_guide/torch_compiler/compile/programming_model.recompilation.html
+Traceback (most recent call last):
+  File "<site-packages>/torch/_dynamo/convert_frame.py", line 1773, in _compile
+    raise_unimplemented_cache_limit_exceeded()
+  File "<site-packages>/torch/_dynamo/convert_frame.py", line 1757, in raise_unimplemented_cache_limit_exceeded
+    unimplemented(
+  File "<site-packages>/torch/_dynamo/exc.py", line 634, in unimplemented
+    raise Unsupported(msg, gb_type, skip_frame)
+torch._dynamo.exc.Unsupported: Dynamo recompile limit exceeded
+  Explanation: Dynamo attempted to recompile the code object too many times, exceeding the recompile_limit cache size limit (currently set to 8). Excessive recompilations can degrade performance due to the compilation overhead of each recompilation.
+  Hint: To monitor recompilations, enable TORCH_LOGS=recompiles. If recompilations are expected, consider increasing torch._dynamo.config.recompile_limit to an appropriate value.
+  Hint: See https://docs.pytorch.org/docs/main/user_guide/torch_compiler/compile/programming_model.recompilation.html for tips on dealing with recompilations.
+
+  Developer debug context: Limit type: recompile_limit
+
+ For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0039.html
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "deploy/bench/bench_compile.py", line 122, in <module>
+    main()
+  File "deploy/bench/bench_compile.py", line 112, in main
+    out["latency"] += latency(p, base)
+                      ^^^^^^^^^^^^^^^^
+  File "deploy/bench/bench_compile.py", line 62, in latency
+    c_s = first_call_s(comp, x)
+          ^^^^^^^^^^^^^^^^^^^^^
+  File "deploy/bench/bench_compile.py", line 50, in first_call_s
+    fn(x)
+  File "<site-packages>/torch/_dynamo/eval_frame.py", line 472, in __call__
+    return super().__call__(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<site-packages>/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<site-packages>/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<site-packages>/torch/_dynamo/eval_frame.py", line 1024, in compile_wrapper
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "<site-packages>/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<site-packages>/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<site-packages>/torch/_dynamo/convert_frame.py", line 2316, in __call__
+    result = self._torchdynamo_orig_backend(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<site-packages>/torch/_dynamo/convert_frame.py", line 729, in __call__
+    result = _compile(
+             ^^^^^^^^^
+  File "<site-packages>/torch/_dynamo/convert_frame.py", line 1780, in _compile
+    raise FailOnRecompileLimitHit(
+torch._dynamo.exc.FailOnRecompileLimitHit: Hard failure due to fullgraph=True

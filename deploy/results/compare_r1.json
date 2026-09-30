@@ -1,0 +1,90 @@
+{
+  "torch_fp32": {
+    "cosine": {
+      "mean": 1.0,
+      "min": 0.9999998807907104,
+      "p01": 0.9999999403953552,
+      "one_minus_mean": 0.0
+    },
+    "retrieval_all": {
+      "queries": 200,
+      "top1_flips": 0,
+      "score_shift_mean_abs": 1.1295080071249686e-07,
+      "score_shift_max_abs": 4.76837158203125e-07
+    },
+    "frozen_gate_test": {
+      "queries": 50,
+      "threshold": 0.6841380000114441,
+      "decision_flips": 0,
+      "top1_flips": 0,
+      "score_shift_mean_abs": 9.536743306171047e-08,
+      "closest_margin_to_threshold": 0.0044092535972595215
+    }
+  },
+  "torch_fp16": {
+    "cosine": {
+      "mean": 0.9999971389770508,
+      "min": 0.9999932050704956,
+      "p01": 0.9999947547912598,
+      "one_minus_mean": 2.86102294921875e-06
+    },
+    "retrieval_all": {
+      "queries": 200,
+      "top1_flips": 2,
+      "score_shift_mean_abs": 0.00021620868938043714,
+      "score_shift_max_abs": 0.0006864666938781738
+    },
+    "frozen_gate_test": {
+      "queries": 50,
+      "threshold": 0.6841380000114441,
+      "decision_flips": 0,
+      "top1_flips": 0,
+      "score_shift_mean_abs": 0.0002336585457669571,
+      "closest_margin_to_threshold": 0.0044092535972595215
+    }
+  },
+  "torch_bf16": {
+    "cosine": {
+      "mean": 0.9998174905776978,
+      "min": 0.9994917511940002,
+      "p01": 0.9996737241744995,
+      "one_minus_mean": 0.0001825094223022461
+    },
+    "retrieval_all": {
+      "queries": 200,
+      "top1_flips": 15,
+      "score_shift_mean_abs": 0.0017869672738015652,
+      "score_shift_max_abs": 0.005955934524536133
+    },
+    "frozen_gate_test": {
+      "queries": 50,
+      "threshold": 0.6841380000114441,
+      "decision_flips": 0,
+      "top1_flips": 5,
+      "score_shift_mean_abs": 0.0016232799971476197,
+      "closest_margin_to_threshold": 0.0044092535972595215
+    }
+  },
+  "torch_autocast_bf16": {
+    "cosine": {
+      "mean": 0.9998642206192017,
+      "min": 0.9996943473815918,
+      "p01": 0.9997212290763855,
+      "one_minus_mean": 0.00013577938079833984
+    },
+    "retrieval_all": {
+      "queries": 200,
+      "top1_flips": 3,
+      "score_shift_mean_abs": 0.0007165202405303717,
+      "score_shift_max_abs": 0.0030797719955444336
+    },
+    "frozen_gate_test": {
+      "queries": 50,
+      "threshold": 0.6841380000114441,
+      "decision_flips": 0,
+      "top1_flips": 1,
+      "score_shift_mean_abs": 0.0010682856664061546,
+      "closest_margin_to_threshold": 0.0044092535972595215
+    }
+  }
+}

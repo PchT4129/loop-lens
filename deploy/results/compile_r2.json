@@ -1,0 +1,254 @@
+{
+  "latency": [
+    {
+      "precision": "fp16",
+      "mode": "default",
+      "batch": 1,
+      "compile_first_call_s": 5.04,
+      "a_median_ms": 2.2043,
+      "b_median_ms": 1.4652,
+      "paired_diff_median_ms": 0.7149,
+      "paired_diff_iqr_ms": [
+        0.6851,
+        0.8197
+      ],
+      "rounds_b_faster": 10,
+      "rounds": 10,
+      "speedup": 1.504
+    },
+    {
+      "precision": "fp16",
+      "mode": "default",
+      "batch": 32,
+      "compile_first_call_s": 4.51,
+      "a_median_ms": 13.886,
+      "b_median_ms": 12.7284,
+      "paired_diff_median_ms": 1.1495,
+      "paired_diff_iqr_ms": [
+        0.77,
+        1.4204
+      ],
+      "rounds_b_faster": 6,
+      "rounds": 6,
+      "speedup": 1.091
+    },
+    {
+      "precision": "fp16",
+      "mode": "reduce-overhead",
+      "batch": 1,
+      "compile_first_call_s": 3.48,
+      "a_median_ms": 2.2469,
+      "b_median_ms": 0.863,
+      "paired_diff_median_ms": 1.3808,
+      "paired_diff_iqr_ms": [
+        1.3146,
+        1.425
+      ],
+      "rounds_b_faster": 10,
+      "rounds": 10,
+      "speedup": 2.604
+    },
+    {
+      "precision": "fp16",
+      "mode": "reduce-overhead",
+      "batch": 32,
+      "compile_first_call_s": 3.34,
+      "a_median_ms": 12.8371,
+      "b_median_ms": 11.0041,
+      "paired_diff_median_ms": 1.7795,
+      "paired_diff_iqr_ms": [
+        1.6688,
+        2.9294
+      ],
+      "rounds_b_faster": 6,
+      "rounds": 6,
+      "speedup": 1.167
+    },
+    {
+      "precision": "fp16",
+      "mode": "max-autotune",
+      "batch": 1,
+      "compile_first_call_s": 15.68,
+      "a_median_ms": 2.3605,
+      "b_median_ms": 0.8293,
+      "paired_diff_median_ms": 1.5312,
+      "paired_diff_iqr_ms": [
+        1.5047,
+        1.6451
+      ],
+      "rounds_b_faster": 10,
+      "rounds": 10,
+      "speedup": 2.846
+    },
+    {
+      "precision": "fp16",
+      "mode": "max-autotune",
+      "batch": 32,
+      "compile_first_call_s": 22.27,
+      "a_median_ms": 12.6682,
+      "b_median_ms": 11.1388,
+      "paired_diff_median_ms": 1.5294,
+      "paired_diff_iqr_ms": [
+        1.2965,
+        1.776
+      ],
+      "rounds_b_faster": 5,
+      "rounds": 6,
+      "speedup": 1.137
+    },
+    {
+      "precision": "fp32",
+      "mode": "default",
+      "batch": 1,
+      "compile_first_call_s": 4.51,
+      "a_median_ms": 3.3867,
+      "b_median_ms": 3.0731,
+      "paired_diff_median_ms": 0.3193,
+      "paired_diff_iqr_ms": [
+        0.3052,
+        0.3339
+      ],
+      "rounds_b_faster": 10,
+      "rounds": 10,
+      "speedup": 1.102
+    },
+    {
+      "precision": "fp32",
+      "mode": "default",
+      "batch": 32,
+      "compile_first_call_s": 4.91,
+      "a_median_ms": 44.5363,
+      "b_median_ms": 44.5939,
+      "paired_diff_median_ms": 1.1517,
+      "paired_diff_iqr_ms": [
+        -1.0256,
+        1.3552
+      ],
+      "rounds_b_faster": 4,
+      "rounds": 6,
+      "speedup": 0.999
+    },
+    {
+      "precision": "fp32",
+      "mode": "reduce-overhead",
+      "batch": 1,
+      "compile_first_call_s": 4.38,
+      "a_median_ms": 3.4269,
+      "b_median_ms": 2.9087,
+      "paired_diff_median_ms": 0.5299,
+      "paired_diff_iqr_ms": [
+        0.4595,
+        0.6176
+      ],
+      "rounds_b_faster": 10,
+      "rounds": 10,
+      "speedup": 1.178
+    },
+    {
+      "precision": "fp32",
+      "mode": "reduce-overhead",
+      "batch": 32,
+      "compile_first_call_s": 4.08,
+      "a_median_ms": 48.516,
+      "b_median_ms": 47.8412,
+      "paired_diff_median_ms": 1.2375,
+      "paired_diff_iqr_ms": [
+        1.2138,
+        1.5255
+      ],
+      "rounds_b_faster": 5,
+      "rounds": 6,
+      "speedup": 1.014
+    },
+    {
+      "precision": "fp32",
+      "mode": "max-autotune",
+      "batch": 1,
+      "compile_first_call_s": 14.87,
+      "a_median_ms": 3.6655,
+      "b_median_ms": 3.1411,
+      "paired_diff_median_ms": 0.5227,
+      "paired_diff_iqr_ms": [
+        0.5054,
+        0.5624
+      ],
+      "rounds_b_faster": 10,
+      "rounds": 10,
+      "speedup": 1.167
+    },
+    {
+      "precision": "fp32",
+      "mode": "max-autotune",
+      "batch": 32,
+      "compile_first_call_s": 18.09,
+      "a_median_ms": 44.5243,
+      "b_median_ms": 43.0444,
+      "paired_diff_median_ms": 1.4141,
+      "paired_diff_iqr_ms": [
+        1.3826,
+        1.4517
+      ],
+      "rounds_b_faster": 6,
+      "rounds": 6,
+      "speedup": 1.034
+    }
+  ],
+  "memory": [
+    {
+      "precision": "fp16",
+      "mode": "eager",
+      "weights_mb": 41.3,
+      "peak_allocated_gb": 0.136,
+      "peak_reserved_gb": 0.377
+    },
+    {
+      "precision": "fp16",
+      "mode": "default",
+      "weights_mb": 41.3,
+      "peak_allocated_gb": 0.136,
+      "peak_reserved_gb": 0.377
+    },
+    {
+      "precision": "fp16",
+      "mode": "reduce-overhead",
+      "weights_mb": 41.3,
+      "peak_allocated_gb": 0.125,
+      "peak_reserved_gb": 0.229
+    },
+    {
+      "precision": "fp16",
+      "mode": "max-autotune",
+      "weights_mb": 41.3,
+      "peak_allocated_gb": 0.125,
+      "peak_reserved_gb": 0.225
+    },
+    {
+      "precision": "fp32",
+      "mode": "eager",
+      "weights_mb": 82.5,
+      "peak_allocated_gb": 0.175,
+      "peak_reserved_gb": 0.26
+    },
+    {
+      "precision": "fp32",
+      "mode": "default",
+      "weights_mb": 82.5,
+      "peak_allocated_gb": 0.175,
+      "peak_reserved_gb": 0.26
+    },
+    {
+      "precision": "fp32",
+      "mode": "reduce-overhead",
+      "weights_mb": 82.5,
+      "peak_allocated_gb": 0.163,
+      "peak_reserved_gb": 0.223
+    },
+    {
+      "precision": "fp32",
+      "mode": "max-autotune",
+      "weights_mb": 82.5,
+      "peak_allocated_gb": 0.162,
+      "peak_reserved_gb": 0.25
+    }
+  ]
+}

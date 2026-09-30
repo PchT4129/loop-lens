@@ -1,0 +1,12 @@
+================================================================================
+Split: night_right
+Num queries: 30
+Tolerance: ±3 frames
+Index range: 70-99
+oracle 零假阳性序列分数阈值: 0.6993
+recall@1: 0.9333
+recall@5: 0.9667
+recall@10: 1.0000
+precision@5: 0.8000
+runtime/retrieval_ms_per_query: 0.3484
+oracle/sequence_recall@100%precision: 0.9000
