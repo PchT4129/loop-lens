@@ -1224,3 +1224,18 @@ MinMax 与 Entropy 的排序反了，恰好说明：在这个模型上，**截�
 候选方向：保留 LayerNorm 输出 / 注意力内部为 FP16、只量化 Linear 的 GEMM（显式 Q/DQ 逐层控制），
 或处理离群通道（逐通道缩放、SmoothQuant 式的把激活离群值"挪"到权重里）。这需要显式量化工具——
 是否安装 `nvidia-modelopt` 待用户决定；不装的退路是手工往 ONNX 里插 Q/DQ 节点。
+
+---
+
+## 环境变更：安装 nvidia-modelopt（为阶段 5 的显式量化）
+
+日期：2026-09-30。用户批准。
+
+- 先做 dry-run 看会改动什么。`nvidia-modelopt[onnx]` 会把 **onnx 1.23 → 1.21**（我们导出用的版本），并带进
+  onnxruntime-gpu（~300 MB）与 cupy——**没有装这个附加项**
+- 只装基础包 `nvidia-modelopt==0.47.0`：新增的都是小的纯 Python 包；唯一的版本变动是 setuptools 70 → 81
+  （modelopt 要求 ≥80，无法回避）。导入时还要 `huggingface_hub`（未声明为依赖），另装；它顺带把 typing_extensions 4.15 → 4.16
+- **安装后核对**：torch 2.11.0+cu128、tensorrt 10.16.1.11、onnx 1.23.0 均不变；18 个单测通过；等价性闸门仍逐位相同；
+  TRT FP16 引擎与 torch.compile（reduce-overhead）对两张夜间图的输出与安装前存档的特征**逐位相同**。
+  已有的所有测量在这个环境里仍然可比
+- 可用的量化配置：`INT8_DEFAULT_CFG`、`INT8_SMOOTHQUANT_CFG`、`INT8_WEIGHT_ONLY_CFG`（以及 FP8 等）

@@ -19,7 +19,16 @@ onnxscript>=0.7,<1          # torch 2.11 的 torch.onnx.export(dynamo=True) 依�
 # 而 11.x 太新、文档与社区案例少。
 tensorrt-cu12==10.16.1.11
 
+# --- 显式量化（阶段 5，2026-09-30 安装）---
+# 只装基础包，不装 [onnx] 附加项：后者会把 onnx 从 1.23 降到 1.21（导出用的版本），
+# 并带进 onnxruntime-gpu（~300 MB）与 cupy。走 PyTorch 侧流程（modelopt.torch.quantization
+# 伪量化 → 导出带 Q/DQ 的 ONNX → TensorRT 显式 INT8），基础包就够。
+# 副作用：setuptools 70 -> 81（modelopt 要求 >=80）、typing_extensions 4.15 -> 4.16。
+# 安装后核对：torch / tensorrt / onnx 版本不变；18 个单测通过；等价性闸门逐位相同；
+# TRT FP16 引擎与 torch.compile 的输出与安装前逐位相同。
+nvidia-modelopt==0.47.0
+huggingface_hub            # modelopt 导入时需要，但没有声明为依赖
+
 # --- 可选，当前未安装（计划已按缺失设计降级路径）---
 # onnxruntime-gpu           # 阶段4 R3 档的延迟数据；缺它则该档只做导出与数值核对
-# nvidia-modelopt           # 阶段5 显式 Q/DQ 逐层敏感度；退路是 TRT 的 ILayer.precision
 # Nsight Systems (nsys)     # 阶段3 时间线剖析；退路见计划阶段3第5步

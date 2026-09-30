@@ -390,8 +390,11 @@ A separate conda env, `vpr-deploy` (python 3.11), cloned from
 native sm_120). Adds onnx, onnxscript and `tensorrt-cu12==10.16.1.11`
 (cu12 to share the CUDA 12.x runtime with torch; 10.x over 11.x for
 documentation coverage). The pip TensorRT wheel ships no `trtexec`: engines
-are built through the Python API. Not installed on purpose: onnxruntime-gpu,
-nvidia-modelopt, Nsight Systems/Compute — ask before adding any of them.
+are built through the Python API. `nvidia-modelopt==0.47.0` (base package only,
+plus `huggingface_hub` which it imports without declaring) was added for stage 5's
+explicit Q/DQ; its `[onnx]` extra is deliberately not installed because it would
+downgrade onnx 1.23 -> 1.21 and pull in onnxruntime-gpu and cupy. Not installed on
+purpose: onnxruntime-gpu, Nsight Systems/Compute — ask before adding any of them.
 
 ### How `deploy/` relates to `src/`
 
