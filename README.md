@@ -76,12 +76,18 @@ and every swap is justified by a measurement from the previous stage — not by
 
 A follow-up in [`deploy/`](deploy/README.md) asks what each inference
 optimisation — low-precision quantisation in particular — costs in VPR accuracy
-when the front end shares a robot's GPU budget. Profiling is done; the TensorRT /
-INT8 ladder is next.
+when the front end shares a robot's GPU budget. The ladder up to INT8 is done;
+per-layer quantisation sensitivity is next.
 
+- **The knee lies between FP16 and INT8.** FP16 TensorRT inside a CUDA Graph runs
+  batch 1 in **0.51 ms, 6.6× faster than FP32**, with task metrics bit-identical.
+  Whole-model INT8 (implicit post-training calibration) buys another 8% and drops
+  held-out Recall@1 from 0.933 to 0.633: a few fixed outlier channels in DINOv2's
+  LayerNorm outputs, up to 19× the typical channel, do not survive per-tensor INT8.
 - **Batch 1 is CPU-launch-bound.** From FP32 to BF16 the GPU work gets 3.5× faster,
   but latency improves only 1.29× — the GPU idles ~70% of the time waiting for
-  ~170 kernel launches.
+  ~170 kernel launches. CUDA Graphs, not precision, are the lever — even under
+  TensorRT.
 - **A layout bug in DINOv2's positional-embedding interpolation** makes one bicubic
   kernel 7.8× slower than necessary, ~46% of all GPU work at BF16 batch 1. Baking
   the embedding removes it, bit-exact.

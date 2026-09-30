@@ -373,9 +373,9 @@ remaining KITTI error lives.
 ## Deployment Subproject (`deploy/`)
 
 Inference profiling and deployment optimisation of the DINOv2 VPR front end,
-started 2026-09-26. Stages 0–3 are done; stage 4 (optimisation ladder:
-`torch.compile` → ONNX → TensorRT FP16 → INT8 → FP8/FP4) and stage 5
-(per-layer quantisation sensitivity) are the main line. Public summary:
+started 2026-09-26. Stages 0–3 and the stage-4 ladder up to INT8 are done
+(4a `torch.compile`, 4b ONNX → TensorRT FP16, 4c TensorRT INT8); FP8/FP4 and
+stage 5 (per-layer quantisation sensitivity, explicit Q/DQ) are next. Public summary:
 `deploy/README.md`; full record: `deploy/EXPERIMENTS.md` (Chinese).
 
 **The question** is not latency ("loop closure is slow" is false — it is off the
@@ -404,10 +404,11 @@ interpolated positional embedding into a buffer and returns a tensor; it is
 **bit-identical** to the original on all 300 images
 (`python -m deploy.export.wrapper --self-check` is a hard gate).
 
-One planned `src/` change, approved but not yet made: an
-`--allow-runtime-mismatch` flag in `src/evaluate.py` that ignores only
-`feature_meta.runtime` when comparing a frozen gate's pipeline, so a gate
-fitted on FP32 features can be applied to TensorRT/INT8 features.
+The one `src/` change it needed: `--allow-runtime-mismatch` in `src/evaluate.py`
+(`pipelines_match(..., ignore_runtime=True)`) ignores only `feature_meta.runtime`
+when comparing a frozen gate's pipeline, so a gate fitted on FP32 features can be
+applied to TensorRT/INT8 features; `deploy/eval/run_protocol.sh` adds it
+automatically when a frozen gate is passed. Four CPU unit tests guard the boundary.
 
 ### Reference numbers (do not re-derive)
 
@@ -419,6 +420,12 @@ fitted on FP32 features can be applied to TensorRT/INT8 features.
   bootstrap samples). Oracle best F1 0.874 is a separability number only.
 - Machine: bandwidth 574 GB/s; FP32/TF32/FP16/BF16 17.6/28.1/54.5/59.8 TFLOP/s.
 - Batch 1 is CPU-launch-bound (~2 ms floor, GPU busy ~30% at BF16).
+- Pareto front so far: **FP16 TensorRT + CUDA Graph** — 0.51 ms at b1, 7.6–7.9 ms
+  at b32, task metrics bit-identical to FP32. Implicit INT8 PTQ (entropy, day_right
+  000–049 calibration) is past the knee: held-out R@1 0.933 → 0.633, deployed F1
+  0.667 [0.533, 0.791], for only ×1.08 (b1) / ×1.10 (b32) and −20 MB. Cause: a few
+  fixed LayerNorm-output channels carry activations up to 19× the typical channel
+  max; per-tensor INT8 either clips them (entropy) or coarsens everything (minmax).
 
 ### Measurement discipline (each rule exists because its absence produced a wrong number)
 
@@ -445,10 +452,15 @@ fitted on FP32 features can be applied to TensorRT/INT8 features.
 ### Working agreement with the user
 
 Stop and report at the end of each stage; ask before large downloads or
-installs. The user is new to the systems side: `DEPLOY_WALKTHROUGH_CN.md` at the
-repo root (local only, gitignored) explains every concept in
-"what / why / what we are doing" form, assuming no prior knowledge. Keep it in
-sync when a conclusion changes.
+installs. The user is new to the systems side. The learning docs (local only,
+gitignored) cover both the main project and `deploy/`: the entry index is
+`LEARNING_GUIDE_CN.md` at the repo root, chapters live in `docs/learning-notes/`
+(00 primer, 01–09 main project, 10–17 deployment). Every concept is explained on
+first use ("what / why / which line of our code"), assuming no prior knowledge, and
+code is walked through line by line with `file:line` references. Previous versions
+(including the old `DEPLOY_WALKTHROUGH_CN.md`) are kept in `docs/learning-notes/_archive/`.
+Keep the chapters in sync when a conclusion changes; a new deployment stage gets its
+own chapter (next: 17, INT8) plus an index row in `LEARNING_GUIDE_CN.md`.
 
 ## Documentation Map
 
@@ -470,7 +482,7 @@ Chinese twin. Match the language of the file you are editing.
 - `docs/v4_evaluation_and_gating.md` — frozen-gate protocol walkthrough.
 - `docs/sequence_matching.md` — derivation, assumptions, complexity, failure
   modes, and the open-set adjacency confound.
-- `docs/learning-notes/` — chronological study notes (01–07).
+- `LEARNING_GUIDE_CN.md` + `docs/learning-notes/` — unified beginner learning docs for the main project and `deploy/` (local only; see "Working agreement").
 - `docs/interview/` — structured Q&A bank (numbered topics + A/B/C/D/E
   appendices + glossary).
 - `*_CN.md` at repo root — interview prep drafts.
@@ -495,4 +507,4 @@ cross-referenced. Every number in the READMEs must trace to one of those files.
   `*_CN.md` prep drafts and `docs/learning-notes/` are untracked for the same
   reason; do not commit them without asking, the GitHub remote is public.
 - `.gitignore` excludes `data/`, `*.pt`, checkpoints, Python cache.
-- The GitHub remote was renamed to `PchT4129/loop-lens` (public); the local directory and the `vpr-loop-closure` conda env keep the old name.
+- The GitHub remote is `PchT4129/loop-lens` (public) and the local directory is `loop_lens`; the `vpr-loop-closure` conda env keeps the old name.
