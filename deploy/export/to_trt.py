@@ -56,6 +56,20 @@ def build(onnx_path: Path, precision: str, engine_path: Path, calibrator=None) -
         config.clear_flag(trt.BuilderFlag.TF32)
     elif precision == "fp16":
         config.set_flag(trt.BuilderFlag.FP16)
+    elif precision == "int8-explicit":
+        # 显式量化：图里的 Q/DQ 决定哪些张量 INT8、缩放因子是多少；不需要校准器。
+        # 仍打开 FP16，让没有 Q/DQ 的部分跑 FP16（而不是 FP32）
+        config.set_flag(trt.BuilderFlag.INT8)
+        config.set_flag(trt.BuilderFlag.FP16)
+    elif precision == "fp4-explicit":
+        # 阶段 6：NVFP4（块缩放的 FP4），块缩放因子本身是 FP8，所以 FP8 也要打开
+        config.set_flag(trt.BuilderFlag.FP4)
+        config.set_flag(trt.BuilderFlag.FP8)
+        config.set_flag(trt.BuilderFlag.FP16)
+    elif precision == "fp8-explicit":
+        # 阶段 6：图里是 FP8 的 Q/DQ（ModelOpt 导出为 TensorRT 自定义算子），同样不需要校准器
+        config.set_flag(trt.BuilderFlag.FP8)
+        config.set_flag(trt.BuilderFlag.FP16)
     elif precision == "int8":
         if calibrator is None:
             raise ValueError("int8 需要校准器")

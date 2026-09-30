@@ -5,12 +5,17 @@
   * 全部测量放在非默认 stream 上（默认 stream 会让 TRT 每次额外同步）
   * b1 与 b32 的对象分开命名、全程持有引用（闭包延迟绑定曾让 CUDA Graph 指向已释放的显存）
   * 配对交替多轮（b1 有间歇的 CPU 侧慢状态）
-只测主方案 INT8（Entropy、day 校准）：几种校准的引擎结构相同（层数、层类型、INT8 层数都一样），
-速度差异不是本档的问题；精度差异由 compare_features 与协议回答。
+默认测 4c 的主方案（隐式 INT8、Entropy、day 校准）；阶段 5、6 用 `--int8 qdq_<标签>` 测显式 Q/DQ 引擎（INT8 或 FP8）。
+
+用法：
+    python -u -m deploy.bench.bench_int8                              # 4c：隐式 INT8
+    python -u -m deploy.bench.bench_int8 --int8 qdq_lin_nofc2_sq      # 阶段 5：显式 INT8
+    python -u -m deploy.bench.bench_int8 --int8 qdq_fp8_lin           # 阶段 6：FP8（变量名仍叫 int8，测的是 FP8 引擎）
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 import warnings
@@ -30,11 +35,11 @@ from deploy.export.trt_runner import TRTRunner                      # noqa: E402
 warnings.filterwarnings("ignore")
 RESULTS = REPO / "deploy" / "results"
 ENG = RESULTS / "engines"
-INT8 = "int8_entropy_day"
-
-
 def main() -> None:
-    out: dict = {"latency": [], "stability": [], "profile": []}
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--int8", default="int8_entropy_day", help="引擎标签：vits14_mean_224_b{1,32}_<标签>.engine")
+    INT8 = ap.parse_args().int8
+    out: dict = {"int8_engine": INT8, "latency": [], "stability": [], "profile": []}
     side = torch.cuda.Stream()
     with torch.cuda.stream(side):
         # ---------------- batch 1 ----------------
@@ -88,7 +93,7 @@ def main() -> None:
             print(f"b32  剖析 {name:<10} {p['kernels_per_forward']:>5.0f} 个 kernel / 前向 | "
                   f"GPU 工作量 {p['kernel_ms_per_forward']:.3f} ms")
 
-    path = RESULTS / "trt_int8_r5.json"
+    path = RESULTS / ("trt_int8_r5.json" if INT8 == "int8_entropy_day" else f"trt_{INT8}.json")
     path.write_text(json.dumps(out, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"已写入 {path.relative_to(REPO)}")
 

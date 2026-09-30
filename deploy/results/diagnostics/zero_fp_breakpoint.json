@@ -1,0 +1,64 @@
+{
+  "generated_at": "2026-09-30T22:31:56",
+  "deploy/results/runtime/trt_qdq_fp8_lin": {
+    "recall_at_100p": 0.1,
+    "first_wrong_rank": 4,
+    "wrong": [
+      {
+        "score": 0.8429,
+        "query": 76,
+        "db": 72,
+        "correct": false,
+        "rank": 4
+      },
+      {
+        "score": 0.6769,
+        "query": 85,
+        "db": 89,
+        "correct": false,
+        "rank": 28
+      },
+      {
+        "score": 0.6681,
+        "query": 95,
+        "db": 90,
+        "correct": false,
+        "rank": 29
+      }
+    ]
+  },
+  "deploy/results/runtime/ptq_nvfp4_linear": {
+    "recall_at_100p": 0.8,
+    "first_wrong_rank": 25,
+    "wrong": [
+      {
+        "score": 0.6654,
+        "query": 86,
+        "db": 90,
+        "correct": false,
+        "rank": 25
+      },
+      {
+        "score": 0.6618,
+        "query": 95,
+        "db": 90,
+        "correct": false,
+        "rank": 26
+      },
+      {
+        "score": 0.6273,
+        "query": 94,
+        "db": 35,
+        "correct": false,
+        "rank": 29
+      },
+      {
+        "score": 0.5475,
+        "query": 85,
+        "db": 98,
+        "correct": false,
+        "rank": 30
+      }
+    ]
+  }
+}

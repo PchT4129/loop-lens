@@ -1,0 +1,184 @@
+{
+  "group": "qkv,proj,fc1",
+  "algorithm": "smoothquant",
+  "enabled_quantizers": 72,
+  "onnx": {
+    "b1": {
+      "path": "deploy/results/engines/vits14_mean_224_b1_qdq_lin_nofc2_sq.onnx",
+      "nodes": 1041,
+      "QuantizeLinear": 72,
+      "DequantizeLinear": 72,
+      "MatMul": 72
+    },
+    "b32": {
+      "path": "deploy/results/engines/vits14_mean_224_b32_qdq_lin_nofc2_sq.onnx",
+      "nodes": 1041,
+      "QuantizeLinear": 72,
+      "DequantizeLinear": 72,
+      "MatMul": 72
+    }
+  },
+  "engines": {
+    "b1": {
+      "engine_layers": 103,
+      "layer_types": {
+        "kgen": 52,
+        "fusion": 48,
+        "custom_layer": 2,
+        "correlation": 1
+      },
+      "myelin_layers": 103,
+      "attention_like_layers": 12,
+      "example_layer_names": [
+        "__mye233461_myl0_0",
+        "__myl_CastConc_myl0_1",
+        "/patch_embed/proj/Conv_myl0_2",
+        "__myl_TranConcAddCastMeanSubMulMeanAddSqrtDivMulCastMulAddCastMulMinMaxRounCast_myl0_3",
+        "__myl_FcMulCastAdd_myl0_4",
+        "_gemm_mha_v2_myl0_5",
+        "__myl_TranReshMoveCastMulMinMaxRounCast_myl0_6",
+        "__myl_FcCastAddMulAdd_myl0_7",
+        "__myl_CastMeanSubMulMeanAddSqrtDivMulCastMulAddCastMulMinMaxRounCast_myl0_8",
+        "__myl_FcMulCastAddDivCastErfCastAddMulMul_myl0_9",
+        "__myl_FcMulAdd_myl0_10",
+        "__myl_CastMeanSubMulMeanAddSqrtDivMulCastMulAddCastMulMinMaxRounCast_myl0_11"
+      ],
+      "top_tactics": {
+        "__myl_CastMeanSubMulMeanAddSqrtDivMulCastMulAddCastMulMinMaxRounCast_0x6a75aae4fca7fc0769bcefc40288a0fb": 23,
+        "sm80_xmma_gemm_i8f32_i8i32_f32_tn_n_tilesize32x64x64_stage6_warpsize2x2x1_tensor16x8x32_by_fusion_tactic": 12,
+        "_gemm_mha_v2_0xafd543db270c02f53aa011e3758a26ac": 12,
+        "__myl_TranReshMoveCastMulMinMaxRounCast_0x357e242a9d812817fc937ec895ecf454": 12,
+        "sm80_xmma_gemm_i8f32_i8i32_f32_tn_n_tilesize64x64x64_stage4_warpsize2x2x1_tensor16x8x32_by_fusion_tactic": 12,
+        "sm80_xmma_gemm_i8f32_i8i32_f32_tn_n_tilesize128x128x64_stage3_warpsize2x2x1_tensor16x8x32_by_fusion_tactic": 12,
+        "sm80_xmma_gemm_f16f16_f16f16_f16_tn_n_tilesize64x64x64_stage4_warpsize2x2x1_tensor16x8x16_by_fusion_tactic": 11,
+        "?": 2
+      },
+      "layers_with_int8_input": 38,
+      "int8_layers_by_type": {
+        "custom_layer": 2,
+        "fusion": 36
+      },
+      "gemm_layers_by_input_type": {},
+      "mha_layers_by_input_type": {
+        "Half": 12
+      },
+      "int8_layer_examples": [
+        {
+          "name": "__mye233461_myl0_0",
+          "onnx": ""
+        },
+        {
+          "name": "__myl_FcMulCastAdd_myl0_4",
+          "onnx": "[ONNX Layer: /blocks.0/attn/qkv/MatMul]\u001f[ONNX Layer: /blocks.0/attn/qkv/input_quantizer/DequantizeLinear]\u001f[ONNX Layer: /blocks.0/attn/qkv/weight_quantizer/Dequa"
+        },
+        {
+          "name": "__myl_FcCastAddMulAdd_myl0_7",
+          "onnx": "[ONNX Layer: /blocks.0/attn/proj/MatMul]\u001f[ONNX Layer: /blocks.0/attn/proj/input_quantizer/DequantizeLinear]\u001f[ONNX Layer: /blocks.0/attn/proj/weight_quantizer/De"
+        },
+        {
+          "name": "__myl_FcMulCastAddDivCastErfCastAddMulMul_myl0_9",
+          "onnx": "[ONNX Layer: /blocks.0/mlp/act/Mul_1]\u001f[ONNX Layer: /blocks.0/mlp/act/Mul]\u001f[ONNX Layer: /blocks.0/mlp/act/Add]\u001f[ONNX Layer: /blocks.0/mlp/act/Div]\u001f[ONNX Layer: /"
+        },
+        {
+          "name": "__myl_FcMulCastAdd_myl0_12",
+          "onnx": "[ONNX Layer: /blocks.1/attn/qkv/MatMul]\u001f[ONNX Layer: /blocks.1/attn/qkv/input_quantizer/DequantizeLinear]\u001f[ONNX Layer: /blocks.1/attn/qkv/weight_quantizer/Dequa"
+        },
+        {
+          "name": "__myl_FcCastAddMulAdd_myl0_15",
+          "onnx": "[ONNX Layer: /blocks.1/attn/proj/MatMul]\u001f[ONNX Layer: /blocks.1/attn/proj/input_quantizer/DequantizeLinear]\u001f[ONNX Layer: /blocks.1/attn/proj/weight_quantizer/De"
+        }
+      ],
+      "device_memory_mb": 1.2,
+      "precision": "int8-explicit",
+      "onnx": "vits14_mean_224_b1_qdq_lin_nofc2_sq.onnx",
+      "engine": "vits14_mean_224_b1_qdq_lin_nofc2_sq.engine",
+      "build_s": 50.3,
+      "engine_mb": 35.5,
+      "network_layers_before_opt": 1953,
+      "trt_version": "10.16.1.11"
+    },
+    "b32": {
+      "engine_layers": 116,
+      "layer_types": {
+        "kgen": 65,
+        "fusion": 24,
+        "gemm": 24,
+        "custom_layer": 2,
+        "correlation": 1
+      },
+      "myelin_layers": 116,
+      "attention_like_layers": 12,
+      "example_layer_names": [
+        "__mye235997_myl0_0",
+        "__myl_CastConc_myl0_1",
+        "/patch_embed/proj/Conv_myl0_2",
+        "__myl_TranConcAddCastMeanSubMulMean_myl0_3",
+        "__myl_AddSqrtDivMulCastMulAddCastMulMinMaxRounCastReshReshTran_myl0_4",
+        "__myl_FcMulCastAdd_myl0_5",
+        "_gemm_mha_v2_myl0_6",
+        "__myl_TranReshMoveCastMulMinMaxRounCast_myl0_7",
+        "/blocks.0/attn/proj/MatMul_myl0_8",
+        "__myl_CastAddMulReshAddCastMeanSubMulMeanAddSqrtDivMulCastMulAddCastMulMinMaxRounCast_myl0_9",
+        "__myl_FcMulCastAddDivCastErfCastAddMulMul_myl0_10",
+        "/blocks.0/mlp/fc2/MatMul_myl0_11"
+      ],
+      "top_tactics": {
+        "sm80_xmma_gemm_i8f32_i8i32_f32_tn_n_tilesize128x64x64_stage3_warpsize2x2x1_tensor16x8x32_by_fusion_tactic": 12,
+        "_gemm_mha_v2_0x7bdda91f00324709aff6c19e22107cd6": 12,
+        "__myl_TranReshMoveCastMulMinMaxRounCast_0xa44917abd4ca3f00544538dae00472a9": 12,
+        "sm80_xmma_gemm_i8f32_i8i32_f32_tn_n_tilesize128x128x64_stage3_warpsize2x2x1_tensor16x8x32": 12,
+        "sm80_xmma_gemm_i8f32_i8i32_f32_tn_n_tilesize128x128x64_stage3_warpsize2x2x1_tensor16x8x32_by_fusion_tactic": 12,
+        "sm80_xmma_gemm_f16f16_f16f16_f16_nn_n_tilesize64x128x32_stage5_warpsize2x2x1_tensor16x8x16": 12,
+        "__myl_MulAddCastMeanSubMulMean_0xb0776197a7051f77ab3872c87181b41a": 11,
+        "__myl_AddSqrtDivMulCastMulAddCastMulMinMaxRounCastReshTran_0x6634c3a979b718b30d0065bfa194e8a9": 11
+      },
+      "layers_with_int8_input": 38,
+      "int8_layers_by_type": {
+        "custom_layer": 2,
+        "fusion": 24,
+        "gemm": 12
+      },
+      "gemm_layers_by_input_type": {
+        "Int8": 12,
+        "Half": 12
+      },
+      "mha_layers_by_input_type": {
+        "Half": 12
+      },
+      "int8_layer_examples": [
+        {
+          "name": "__mye235997_myl0_0",
+          "onnx": ""
+        },
+        {
+          "name": "__myl_FcMulCastAdd_myl0_5",
+          "onnx": "[ONNX Layer: /blocks.0/attn/qkv/MatMul]\u001f[ONNX Layer: /blocks.0/attn/qkv/input_quantizer/DequantizeLinear]\u001f[ONNX Layer: /blocks.0/attn/qkv/weight_quantizer/Dequa"
+        },
+        {
+          "name": "/blocks.0/attn/proj/MatMul_myl0_8",
+          "onnx": "[ONNX Layer: /blocks.0/attn/proj/MatMul]\u001f[ONNX Layer: /blocks.0/attn/proj/input_quantizer/DequantizeLinear]\u001f[ONNX Layer: /blocks.0/attn/proj/weight_quantizer/De"
+        },
+        {
+          "name": "__myl_FcMulCastAddDivCastErfCastAddMulMul_myl0_10",
+          "onnx": "[ONNX Layer: /blocks.0/mlp/act/Mul_1]\u001f[ONNX Layer: /blocks.0/mlp/act/Mul]\u001f[ONNX Layer: /blocks.0/mlp/act/Add]\u001f[ONNX Layer: /blocks.0/mlp/act/Div]\u001f[ONNX Layer: /"
+        },
+        {
+          "name": "__myl_FcMulCastAdd_myl0_14",
+          "onnx": "[ONNX Layer: /blocks.1/attn/qkv/MatMul]\u001f[ONNX Layer: /blocks.1/attn/qkv/input_quantizer/DequantizeLinear]\u001f[ONNX Layer: /blocks.1/attn/qkv/weight_quantizer/Dequa"
+        },
+        {
+          "name": "/blocks.1/attn/proj/MatMul_myl0_17",
+          "onnx": "[ONNX Layer: /blocks.1/attn/proj/MatMul]\u001f[ONNX Layer: /blocks.1/attn/proj/input_quantizer/DequantizeLinear]\u001f[ONNX Layer: /blocks.1/attn/proj/weight_quantizer/De"
+        }
+      ],
+      "device_memory_mb": 51.2,
+      "precision": "int8-explicit",
+      "onnx": "vits14_mean_224_b32_qdq_lin_nofc2_sq.onnx",
+      "engine": "vits14_mean_224_b32_qdq_lin_nofc2_sq.engine",
+      "build_s": 21.2,
+      "engine_mb": 36.0,
+      "network_layers_before_opt": 1953,
+      "trt_version": "10.16.1.11"
+    }
+  }
+}

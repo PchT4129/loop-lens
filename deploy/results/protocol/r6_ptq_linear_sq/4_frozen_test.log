@@ -1,0 +1,41 @@
+[runtime] gate fitted on pytorch-fp32 (unset); applied to {'kind': 'pytorch-fakequant', 'group': 'linear', 'algorithm': 'smoothquant', 'calibration': 'day_right 000-049'}
+[开集] 从 database 移除帧号 70-79 共 10 张，剩余 90 张
+================================================================================
+Split: night_right
+Num queries: 50
+Tolerance: ±3 frames
+Index range: 50-99
+部署 gate: similarity thresholds=deploy/results/protocol/ref_fp32/gate_similarity.json
+oracle 零假阳性序列分数阈值: 0.8609
+recall@1: 0.8200
+recall@5: 0.8800
+recall@10: 0.9000
+precision@5: 0.6880
+recall@1/ci95_low: 0.7000
+recall@1/ci95_high: 0.9200
+recall@5/ci95_low: 0.7800
+recall@5/ci95_high: 0.9600
+recall@10/ci95_low: 0.8200
+recall@10/ci95_high: 0.9800
+runtime/retrieval_ms_per_query: 0.0688
+oracle/sequence_recall@100%precision: 0.2400
+open_set/sequence_auprc: 0.8208
+oracle/open_set/best_f1: 0.8696
+oracle/open_set/best_f1_threshold: 0.7214
+oracle/open_set/recall@100%precision: 0.2609
+oracle/open_set/threshold@100%precision: 0.8609
+deployed/open_set/precision: 0.8333
+deployed/open_set/recall: 0.8696
+deployed/open_set/f1: 0.8511
+deployed/open_set/TP: 40.0000
+deployed/open_set/FP: 8.0000
+deployed/open_set/FN: 2.0000
+deployed/open_set/TN: 0.0000
+deployed/open_set/num_with_match: 46.0000
+deployed/open_set/num_without_match: 4.0000
+deployed/open_set/precision/ci95_low: 0.7234
+deployed/open_set/precision/ci95_high: 0.9362
+deployed/open_set/recall/ci95_low: 0.7609
+deployed/open_set/recall/ci95_high: 0.9565
+deployed/open_set/f1/ci95_low: 0.7500
+deployed/open_set/f1/ci95_high: 0.9362

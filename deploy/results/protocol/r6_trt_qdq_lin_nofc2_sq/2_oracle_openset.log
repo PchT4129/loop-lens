@@ -1,0 +1,17 @@
+[开集] 从 database 移除帧号 30-49 共 20 张，剩余 80 张
+================================================================================
+Split: night_right
+Num queries: 100
+Tolerance: ±3 frames
+oracle 零假阳性序列分数阈值: 0.8666
+recall@1: 0.7400
+recall@5: 0.8300
+recall@10: 0.8400
+precision@5: 0.6300
+runtime/retrieval_ms_per_query: 0.0518
+oracle/sequence_recall@100%precision: 0.2300
+open_set/sequence_auprc: 0.8064
+oracle/open_set/best_f1: 0.8743
+oracle/open_set/best_f1_threshold: 0.7039
+oracle/open_set/recall@100%precision: 0.2674
+oracle/open_set/threshold@100%precision: 0.8666

@@ -1,0 +1,158 @@
+{
+  "format": "fp8",
+  "group": "linear",
+  "algorithm": "max",
+  "enabled_quantizers": 96,
+  "onnx": {
+    "b1": {
+      "path": "deploy/results/engines/vits14_mean_224_b1_qdq_fp8_lin.onnx",
+      "nodes": 1113,
+      "quantize": 96,
+      "dequantize": 96,
+      "MatMul": 72,
+      "qdq_op_types": [
+        "TRT_FP8DequantizeLinear",
+        "TRT_FP8QuantizeLinear"
+      ]
+    },
+    "b32": {
+      "path": "deploy/results/engines/vits14_mean_224_b32_qdq_fp8_lin.onnx",
+      "nodes": 1113,
+      "quantize": 96,
+      "dequantize": 96,
+      "MatMul": 72,
+      "qdq_op_types": [
+        "TRT_FP8DequantizeLinear",
+        "TRT_FP8QuantizeLinear"
+      ]
+    }
+  },
+  "engines": {
+    "b1": {
+      "engine_layers": 116,
+      "layer_types": {
+        "kgen": 65,
+        "gemm": 48,
+        "custom_layer": 2,
+        "correlation": 1
+      },
+      "myelin_layers": 116,
+      "attention_like_layers": 12,
+      "example_layer_names": [
+        "__mye210475_myl0_0",
+        "__myl_CastConc_myl0_1",
+        "/patch_embed/proj/Conv_myl0_2",
+        "__myl_TranConcAddCastMeanSubMulMeanAddSqrtDivMulCastMulAddCastMulCast_myl0_3",
+        "__mye200039+__mye200027+__mye200015_myl0_4",
+        "_gemm_mha_v2_myl0_5",
+        "__myl_MoveReshTran_myl0_6",
+        "/blocks.0/attn/proj/MatMul_myl0_7",
+        "__myl_MulAddCastMeanSubMulMeanAddSqrtDivMulCastMulAddCastMulCast_myl0_8",
+        "/blocks.0/mlp/fc1/MatMul_myl0_9",
+        "__myl_DivCastErfCastAddMulMulCastMulCast_myl0_10",
+        "/blocks.0/mlp/fc2/MatMul_myl0_11"
+      ],
+      "top_tactics": {
+        "sm89_xmma_gemm_e4m3f16_e4m3f32_f32_tn_n_tilesize64x64x64_stage4_warpsize2x2x1_tensor16x8x32_bias_f16": 24,
+        "__myl_MulAddCastMeanSubMulMeanAddSqrtDivMulCastMulAddCastMulCast_0x56b67d6777f15becb249488ffdb9e823": 23,
+        "__myl_MoveReshTran_0x8bef2eb9bcf277620d258021447aee8d": 12,
+        "sm89_xmma_gemm_e4m3f16_e4m3f32_f32_tn_n_tilesize64x128x64_stage4_warpsize2x2x1_tensor16x8x32_bias_f16": 12,
+        "__myl_DivCastErfCastAddMulMulCastMulCast_0x70e45324865027cc395048c0500621c8": 12,
+        "sm89_xmma_gemm_e4m3f16_e4m3f32_f32_tn_n_tilesize64x64x64_stage6_warpsize2x2x1_tensor16x8x32_bias_f16": 12,
+        "?": 2,
+        "__myl_CastConc_0xdaa954dc95381d64c62525f1ecf05d2c": 1
+      },
+      "layers_with_int8_input": 2,
+      "int8_layers_by_type": {
+        "custom_layer": 2
+      },
+      "gemm_layers_by_input_type": {
+        "FP8": 48
+      },
+      "mha_layers_by_input_type": {
+        "Half": 12
+      },
+      "int8_layer_examples": [
+        {
+          "name": "__mye210475_myl0_0",
+          "onnx": ""
+        },
+        {
+          "name": "__mye210477_myl0_115",
+          "onnx": ""
+        }
+      ],
+      "device_memory_mb": 1.8,
+      "precision": "fp8-explicit",
+      "onnx": "vits14_mean_224_b1_qdq_fp8_lin.onnx",
+      "engine": "vits14_mean_224_b1_qdq_fp8_lin.engine",
+      "build_s": 27.5,
+      "engine_mb": 22.7,
+      "network_layers_before_opt": 1881,
+      "trt_version": "10.16.1.11"
+    },
+    "b32": {
+      "engine_layers": 128,
+      "layer_types": {
+        "kgen": 77,
+        "gemm": 48,
+        "custom_layer": 2,
+        "correlation": 1
+      },
+      "myelin_layers": 128,
+      "attention_like_layers": 12,
+      "example_layer_names": [
+        "__mye212946_myl0_0",
+        "__myl_CastConc_myl0_1",
+        "/patch_embed/proj/Conv_myl0_2",
+        "__myl_TranConcAddCastMeanSubMulMean_myl0_3",
+        "__myl_AddSqrtDivMulCastMulAddCastMulCastReshReshTran_myl0_4",
+        "__mye200288+__mye200276+__mye200264_myl0_5",
+        "_gemm_mha_v2_myl0_6",
+        "__myl_MoveReshTran_myl0_7",
+        "/blocks.0/attn/proj/MatMul_myl0_8",
+        "__myl_MulReshAddCastMeanSubMulMeanAddSqrtDivMulCastMulAddCastMulCast_myl0_9",
+        "/blocks.0/mlp/fc1/MatMul_myl0_10",
+        "__myl_DivCastErfCastAddMulMulCastMulCast_myl0_11"
+      ],
+      "top_tactics": {
+        "sm89_xmma_gemm_e4m3f16_e4m3f32_f32_tn_n_tilesize128x128x64_stage3_warpsize2x2x1_tensor16x8x32_bias_f16": 24,
+        "sm89_xmma_gemm_e4m3f16_e4m3f32_f32_tn_n_tilesize64x64x64_stage4_warpsize2x2x1_tensor16x8x32_bias_f16": 24,
+        "__myl_MoveReshTran_0xd5e47d2a72d191af94cf9d2110482237": 12,
+        "__myl_DivCastErfCastAddMulMulCastMulCast_0x3ee06b7d0215343dc5b73bdccc248e70": 12,
+        "__myl_MulAddCastMeanSubMulMean_0xb0776197a7051f77ab3872c87181b41a": 11,
+        "__myl_AddSqrtDivMulCastMulAddCastMulCastReshTran_0x2910c7c8c7657961379c54a5b85cac71": 11,
+        "__myl_MulAddCastMeanSubMulMeanAddSqrtDivMulCastMulAddCastMulCast_0xb23c3ac30eef797b870ca638994a74e5": 11,
+        "?": 2
+      },
+      "layers_with_int8_input": 2,
+      "int8_layers_by_type": {
+        "custom_layer": 2
+      },
+      "gemm_layers_by_input_type": {
+        "FP8": 48
+      },
+      "mha_layers_by_input_type": {
+        "Half": 12
+      },
+      "int8_layer_examples": [
+        {
+          "name": "__mye212946_myl0_0",
+          "onnx": ""
+        },
+        {
+          "name": "__mye212948_myl0_127",
+          "onnx": ""
+        }
+      ],
+      "device_memory_mb": 51.2,
+      "precision": "fp8-explicit",
+      "onnx": "vits14_mean_224_b32_qdq_fp8_lin.onnx",
+      "engine": "vits14_mean_224_b32_qdq_fp8_lin.engine",
+      "build_s": 10.0,
+      "engine_mb": 25.8,
+      "network_layers_before_opt": 1881,
+      "trt_version": "10.16.1.11"
+    }
+  }
+}

@@ -115,6 +115,8 @@ REGISTRY = {
     # 阶段 4c：隐式量化 INT8（+FP16 回退），名字 = 校准算法 × 校准集
     **{f"trt-int8-{algo}-{split}": trt_engine(f"int8_{algo}_{split}")
        for algo in ("entropy", "minmax") for split in ("day", "night")},
+    # 阶段 5：显式 Q/DQ（ModelOpt 导出），名字 = 配置标签
+    **{f"trt-qdq-{tag}": trt_engine(f"qdq_{tag}") for tag in ("lin_nofc2_sq", "lin_sq", "lin", "fp8_lin")},
     "torch-fp32": torch_eager("fp32"),
     "torch-fp16": torch_eager("fp16"),
     "torch-bf16": torch_eager("bf16"),
